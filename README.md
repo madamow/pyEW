@@ -16,6 +16,8 @@ http://matplotlib.org/users/installing.html
 Stellar spectrum
  - must be in ascii file,
  - must be in laboratory wavelength scale
+ - it should be normalized (the continuum fit does not have to be perfect,
+    continuum will be corrected locally)
 
 Line list
 - pyEW is written to give an output file ready for MOOG,
