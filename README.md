@@ -1,5 +1,5 @@
 # pyEW
-Python functions to find equivalent widths of spectral line
+Python functions for finding equivalent widths of spectral lines
 
 To run this program you need those python libraries:
 
