@@ -244,7 +244,9 @@ v_lvl = config.getfloat('Lines','v_lvl')
 det_level = config.getfloat('Lines','det_level')
 plot_flag = config.getboolean('Lines','plot_flag')
 
-if plot_flag == True:
+show_lines=np.array(config.get('Lines','show_lines').split(" "),dtype=float)
+
+if plot_flag == True or show_lines[0]!=0:
     fig = plt.figure()
 
 for file_name in file_list:
@@ -445,8 +447,15 @@ for file_name in file_list:
         moog= "%10s%10s%10s%10s%10s%10s%10s %s %s %s\n" % \
                (line,elem_id,exc_p,loggf,'','',eqw,eqw_err,round(s1,3),round(a1,3)) 
         plt.ion()
+        if line in show_lines and plot_flag==False:
+            plot_line=True
+        elif line not in show_lines and plot_flag==False:
+            plot_line=False
+        else:
+            plot_line=True
+        
         #Ploting module - 
-        if (plot_flag==True):# and eqw>0.):
+        if plot_line:# and eqw>0.):
             ax1=fig.add_subplot(2,1,1)
             x_formatter = matplotlib.ticker.ScalarFormatter(useOffset=False)
             ax1.xaxis.set_major_formatter(x_formatter)
@@ -476,8 +485,8 @@ for file_name in file_list:
             ax2.set_ylim(np.min(gggf),np.max(gggf))
             ax2.set_xlim(line-off,line+off)
             ax2.legend(loc=3,numpoints=1,fontsize='10')                
-
             plt.pause(0.1)
+            
             print "Do you want to write result to file?(y/n/q) (default:yes)"            
             wait=raw_input()
            
