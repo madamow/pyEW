@@ -13,16 +13,18 @@ http://www.scipy.org/scipylib/download.html
 http://matplotlib.org/users/installing.html
 
 
-#Stellar spectrum
+Stellar spectrum
  - must be in ascii file,
  - must be in laboratory wavelength scale
+ - it should be normalized (the continuum fit does not have to be perfect,
+    continuum will be corrected locally)
 
-#Line list
+Line list
 - pyEW is written to give an output file ready for MOOG,
   hence in line list you need to include:
   wavelength, element (MOOG format), excitation potential, log gf
 
-#Output file
+Output file
 - is in format reqired by MOOG
 - some extra information are placed at the end of line,
   like estimated error, width of a line (gaussian sigma),line depth.
