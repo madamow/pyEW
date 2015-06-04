@@ -205,14 +205,14 @@ def res_v(p, data):
 ######################################################
 def leastsq_errors(fit_tab,p_no): #so.leastsq result+no of parameters fitted
     #use so.leastsq output to estimate error parameter
-    sq=np.sum(fit_tab[2]['fvec']**2)/(len(fit_tab[2])-len(fit_tab[0]))
     pcov=fit_tab[1]
     if pcov is None:
         row_col=((len(fit_tab[0])/p_no)*p_no)
         print "Covariance matrix is empty"
         errs_matrix=np.ones((row_col,row_col))
         errs_matrix[:,:]=1000.0 #make errors huge 
-    else:        
+    else:
+        sq=np.sum(fit_tab[2]['fvec']**2)/(len(fit_tab[2])-len(fit_tab[0]))        
         errs_matrix= sq*pcov
     i=np.arange(len(fit_tab[0]))
     f_errs= np.reshape(errs_matrix[i,i]**2,((len(fit_tab[0])/p_no),p_no))
@@ -221,8 +221,6 @@ def leastsq_errors(fit_tab,p_no): #so.leastsq result+no of parameters fitted
 
 ######################################################
 ######################################################
-
-    
 #Read config file
 config = ConfigParser.ConfigParser()
 cfg_file = sys.argv[1]
@@ -237,7 +235,7 @@ off=config.getfloat('Spectrum','off')
 s_factor=config.getfloat('Spectrum','s_factor')
 rejt_auto=config.getboolean('Spectrum','rejt_auto')
 rejt=config.getfloat('Spectrum','rejt')
-#if rejt_auto is True, rejt will be ignored
+#if rejt_auto is True, rejt from config file will be ignored
 
 r_lvl = config.getfloat('Lines','r_lvl')
 l_eqw = config.getfloat('Lines','l_eqw')
@@ -246,9 +244,8 @@ v_lvl = config.getfloat('Lines','v_lvl')
 det_level = config.getfloat('Lines','det_level')
 plot_flag = config.getboolean('Lines','plot_flag')
 
-if plot_flag==True:
-    fig=plt.figure()
-
+if plot_flag == True:
+    fig = plt.figure()
 
 for file_name in file_list:
     file_name=file_name.strip()
@@ -263,18 +260,18 @@ for file_name in file_list:
 
 ###################################################
     #Deal with rejt parameter    
-    if rejt_auto==True:
+    if rejt_auto == True:
         rejt,SN = auto_rejt(file,config)
     else:
        print "I will use rejt defined by user"
-       SN=1.0/(1.0-rejt)
+       SN = 1.0/(1.0-rejt)
     print "signal to noise:", SN
     print "rejt parameter:", rejt
 #####################################################
     #Check where spectrum starts and ends
     #Check if your line list fits to this range
     #If not, crop the linelist
-    lines= lines[np.where(( lines[:,0]<file[:,0].max()-off) & (lines[:,0]>file[:,0].min()+off))]
+    lines = lines[np.where(( lines[:,0]<file[:,0].max()-off) & (lines[:,0]>file[:,0].min()+off))]
 
 #####################################################
 #Lets analyze every single line
@@ -299,7 +296,7 @@ for file_name in file_list:
         gf = ndimage.gaussian_filter1d(f, sigma=s_factor, order=1, mode='wrap') / dx
         #Second derivative
         ggf = ndimage.gaussian_filter1d(f, sigma=s_factor, order=2, mode='wrap') / (dx*dx)
-        #Third derivatives
+        #Third derivative
         gggf = np.array(ndimage.gaussian_filter1d(f, sigma=s_factor, order=3, mode='wrap') / dxdxdx)
 
         gggf_infm,gggf_infp=find_inflection(x,gggf)
@@ -345,8 +342,6 @@ for file_name in file_list:
         mgaus=multiple_gaus(x,params)
         line=round(line,2)
         eqw=a1*np.sqrt(2*np.pi)*np.abs(s1)*1000.
-        print mg_errs[ip,1]/a1
-        print mg_errs[ip,2]/np.abs(s1)
         eqw_err= eqw*(mg_errs[ip,1]/a1+mg_errs[ip,2]/np.abs(s1))
 
 #Calculate single gauss profile (this gauss is a part of multigaussian fit)
@@ -355,8 +350,8 @@ for file_name in file_list:
  #Determine region close to gaussian line center#
         iu=np.abs(x-x01-3.0*np.abs(s1)).argmin()
         il=np.abs(x-x01+3.0*np.abs(s1)).argmin()
-        if ((iu==il) or (np.abs(iu-il)<10.)):#  or (s1<dx) or (3*s1>off)):    
-           print line, elem_id,"Sigma is to low or to high"
+        if ((iu==il) or (np.abs(iu-il)<10.)):
+           print line, elem_id,"Sigma is to low"
            fit_other=False
         else:
            fit_other=True
@@ -373,16 +368,12 @@ for file_name in file_list:
 
             gf_errs=leastsq_errors(gaus_p,3)
             eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(s1s))
-        else:
+
+        elif fit_other==False or np.abs(x01-x01s)>det_level:
             gausf=np.zeros_like(f)
             eqw_gf=-99.9
             eqw_gf_err=99.9
         
-        if np.abs(x01-x01s)>det_level:
-            gausf=np.zeros_like(f)
-            eqw_gf=-99.9
-            eqw_gf_err=99.9 
-
 #####################################################################
 #Fit Voigt profile
         A_voigt=0.1
@@ -400,15 +391,12 @@ for file_name in file_list:
             svoigt=Voigt(x,alphaD,alphaL, nu_0, A_voigt,0.,0.)
             I=voigt_p[0][3]*1000.
             v_errs=leastsq_errors(voigt_p,4)[0][3]
-        else:
+
+        elif fit_other==False or np.abs(x01-nu_0)>det_level:
             svoigt=np.zeros_like(f)
-            print "Cannot fit Voigt profile"
             I=-99.9
             v_errs=99.9
-        if np.abs(x01-nu_0)>det_level:
-            gausf=np.zeros_like(f)
-            eqw_gf=-99.9
-            eqw_gf_err=99.9 
+
 #######################################################################        
 #Check sigmas for o-c diagrams around selected line
         s_oc_mg = np.average(np.abs(f[il:iu]-1.0+mgaus[il:iu]))
@@ -441,7 +429,6 @@ for file_name in file_list:
             eqw=eqw_gf
             eqw_err=eqw_gf_err
                  
-
         if (eqw>h_eqw or eqw<l_eqw):
             print eqw
             print "Line is to strong or to weak"
