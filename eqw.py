@@ -9,8 +9,6 @@ from scipy.special import wofz
 import ConfigParser
 import sys
 
-ln2=np.log(2)
-
 ######################################################
 #Spectrum preparation
 ######################################################
@@ -182,7 +180,7 @@ def Voigt(nu, alphaD, alphaL, nu_0, A, a, b):
    # The Voigt line shape in terms of its physical parameters
     #alphaD, alphaL half widths at half max for Doppler and Lorentz(not FWHM)
     #A - scaling factor
-    f = np.sqrt(ln2)
+    f = np.sqrt(np.log(2))
     x = (nu-nu_0)/alphaD * f
     y = alphaL/alphaD * f
     backg = a + b*nu 
