@@ -87,11 +87,11 @@ def find_inflection(x,y):
    to_minus=[]
    to_plus=[]
    for i in np.arange(0,len(y)-1,1):
+       a=(y[i+1]-y[i])/(x[i+1]-x[i])
+       b=y[i]-a*x[i]
        if (y[i]>0.0 and y[i+1]<0.0):
-           a,b=np.polyfit([x[i],x[i+1]],[y[i],y[i+1]],1)
            to_minus.append(-b/a)
        elif (y[i]<0.0 and y[i+1]>0):
-           a,b=np.polyfit([x[i],x[i+1]],[y[i],y[i+1]],1)
            to_plus.append(-b/a)
    to_minus=np.array(to_minus)
    to_plus=np.array(to_plus)
