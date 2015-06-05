@@ -76,6 +76,17 @@ def auto_rejt(tab,config):
 ######################################################
 #Finding strong lines
 ######################################################
+def find_derivatives(x,f,dx,s_factor):
+    dxdxdx=dx*dx*dx 
+    #First derivative
+    gf = ndimage.gaussian_filter1d(f, sigma=s_factor, order=1, mode='wrap') / dx
+    #Second derivative
+    ggf = ndimage.gaussian_filter1d(f, sigma=s_factor, order=2, mode='wrap') / (dx*dx)
+    #Third derivative
+    gggf = np.array(ndimage.gaussian_filter1d(f, sigma=s_factor, order=3, mode='wrap') / dxdxdx)
+    
+    return gf,ggf,gggf
+
 
 def find_inflection(x,y):
    #This function finds zero points for set of data
@@ -220,6 +231,37 @@ def leastsq_errors(fit_tab,p_no): #so.leastsq result+no of parameters fitted
     return f_errs
 
 ######################################################
+#Ploting functions
+######################################################        
+def onclick(event):
+    # when none of the toolbar buttons is activated and the user clicks in the
+    # plot somewhere,
+    toolbar = plt.get_current_fig_manager().toolbar
+    if event.button==1 and toolbar.mode=='':
+        ind= np.abs((gggf_infm-event.xdata)).argmin()
+        plt.plot(gggf_infm[ind],1.0,'o',color='r',mec='b',picker=5,label='line_pnt')
+    plt.draw()   
+    strong_lines.append(gggf_infm[ind])
+
+def plot_strong_lines(x,f,gggf_infm,strong_lines):
+    plt.plot(x,f,color='k',label='obs_spec')
+    plt.plot(gggf_infm, np.ones_like(gggf_infm),'o',color='b',label='flex')
+    for elem in strong_lines:
+        plt.axvline(elem,color='r')
+    plt.plot(strong_lines, np.ones_like(strong_lines),'o',color='r',label='strong')
+    plt.gcf().canvas.mpl_connect('button_press_event',onclick)
+    
+    plt.pause(0.1)
+
+    flg=raw_input()
+    if flg=='r': 
+        flg=True
+    elif flg=='q':
+        flg=False
+    plt.clf()
+    return flg
+ 
+######################################################
 ######################################################
 #Read config file
 config = ConfigParser.ConfigParser()
@@ -285,31 +327,37 @@ for file_name in file_list:
             print "Nothing to do in this range, probably gap in you spectra"
             continue
         
+        #Make spectrum linear
+        #(default assumption - spectrum is not linear)
         lin1,dx=do_linear(d)
         
+        #Correct continuum around chosen line
         lin=correct_continuum(lin1,rejt)
 
         x=lin[:,0]
         f=lin[:,1]
         
-        dxdxdx=dx*dx*dx
-     
-        #First derivative
-        gf = ndimage.gaussian_filter1d(f, sigma=s_factor, order=1, mode='wrap') / dx
-        #Second derivative
-        ggf = ndimage.gaussian_filter1d(f, sigma=s_factor, order=2, mode='wrap') / (dx*dx)
-        #Third derivative
-        gggf = np.array(ndimage.gaussian_filter1d(f, sigma=s_factor, order=3, mode='wrap') / dxdxdx)
-
+        #Find derivatives
+        gf,ggf,gggf=find_derivatives(x,f,dx,s_factor)
+        
+        #Find inflection points 
         gggf_infm,gggf_infp=find_inflection(x,gggf)
         gf_infm,gf_infp=find_inflection(x,gf)
         
+        #If there is no inflection points, go to next line on list
         if (gggf_infm.size==0 or gggf_infp.size==0):
-            continue
-
+            continue        
+        
+        #Identify strong lines automatically
         strong_lines,noise=find_strong_lines(x,gggf,gggf_infm,r_lvl,SN)
         strong_lines=evaluate_lines(line,strong_lines,det_level,gggf_infm)
         
+        ch_s_l=True
+        #check strong lines
+        while ch_s_l:
+            ch_s_l=plot_strong_lines(x,f,gggf_infm,strong_lines)
+        
+
         if len(strong_lines)==0:
             continue
                 
