@@ -149,6 +149,26 @@ def evaluate_lines(line,strong_lines,det_level,gggf_infm):
         print line, "was not detected" 
     return strong_lines
 
+
+######################################################
+#Errors for parameters of the fit
+######################################################
+def leastsq_errors(fit_tab,p_no): #so.leastsq result+no of parameters fitted
+    #use so.leastsq output to estimate error parameter
+    pcov=fit_tab[1]
+    if pcov is None:
+        row_col=((len(fit_tab[0])/p_no)*p_no)
+        print "Covariance matrix is empty"
+        errs_matrix=np.ones((row_col,row_col))
+        errs_matrix[:,:]=1000.0 #make errors huge 
+    else:
+        sq=np.sum(fit_tab[2]['fvec']**2)/(len(fit_tab[2])-len(fit_tab[0]))        
+        errs_matrix= sq*pcov
+    i=np.arange(len(fit_tab[0]))
+    f_errs= np.reshape(errs_matrix[i,i]**2,((len(fit_tab[0])/p_no),p_no))
+    
+    return f_errs
+
 ######################################################
 #Gaussian fitting
 ######################################################
@@ -174,6 +194,18 @@ def res_mg(p,x,y,nb):
     mg=multiple_gaus(x,params)
     err=1./np.abs(y)
     return (y-mg)/err
+    
+def fit_single_Gauss(x,f,a1,x01,s1):
+    gaus_p = so.leastsq(res_g,[a1,x01,s1],
+             args=([x[il:iu],1.0-f[il:iu]]),
+             full_output=1)
+    a1s,x01s,s1s=gaus_p[0]
+    gausf=gaus(x,a1s,x01s,s1s)
+    eqw_gf=a1s*np.sqrt(2*np.pi)*np.abs(s1s)*1000.
+
+    gf_errs=leastsq_errors(gaus_p,3)
+    eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(s1s))
+    return gausf,eqw_gf,eqw_gf_err
 
 ######################################################
 #Voigt fitting
@@ -211,24 +243,25 @@ def res_v(p, data):
     err=1./np.abs(y)
     return (y-funcV(p,x)) / err
 
-######################################################
-#Errors for parameters of the fit
-######################################################
-def leastsq_errors(fit_tab,p_no): #so.leastsq result+no of parameters fitted
-    #use so.leastsq output to estimate error parameter
-    pcov=fit_tab[1]
-    if pcov is None:
-        row_col=((len(fit_tab[0])/p_no)*p_no)
-        print "Covariance matrix is empty"
-        errs_matrix=np.ones((row_col,row_col))
-        errs_matrix[:,:]=1000.0 #make errors huge 
-    else:
-        sq=np.sum(fit_tab[2]['fvec']**2)/(len(fit_tab[2])-len(fit_tab[0]))        
-        errs_matrix= sq*pcov
-    i=np.arange(len(fit_tab[0]))
-    f_errs= np.reshape(errs_matrix[i,i]**2,((len(fit_tab[0])/p_no),p_no))
+def fit_Voigt(x,f,x01):
+    A_voigt=0.1
+    alphaD=0.01
+    alphaL=0.01
+    nu_0=x01
+    pv0=[alphaD, alphaL, nu_0, A_voigt]
+                
+    voigt_p = so.leastsq(res_v,pv0,
+              args=([x[il:iu],1.0-f[il:iu],np.ones_like(x[il:iu])]),
+              full_output=1)
+                               
+    alphaD,alphaL, nu_0, A_voigt=voigt_p[0]
+    svoigt=Voigt(x,alphaD,alphaL, nu_0, A_voigt,0.,0.)
+    I=voigt_p[0][3]*1000.
+    v_errs=leastsq_errors(voigt_p,4)[0][3]
     
-    return f_errs
+    return svoigt,I,v_errs
+
+
 
 ######################################################
 #Ploting functions
@@ -407,45 +440,18 @@ for file_name in file_list:
            fit_other=True
                                                  
 ######################################################################
-#Fit single gauss profile
+#Fit single Gauss and Voigt profile
         if fit_other==True: 
-            gaus_p = so.leastsq(res_g,[a1,x01,s1],
-                     args=([x[il:iu],1.0-f[il:iu]]),
-                     full_output=1)
-            a1s,x01s,s1s=gaus_p[0]
-            gausf=gaus(x,a1s,x01s,s1s)
-            eqw_gf=a1s*np.sqrt(2*np.pi)*np.abs(s1s)*1000.
-
-            gf_errs=leastsq_errors(gaus_p,3)
-            eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(s1s))
-
+            gausf,eqw_gf,eqw_gf_err=fit_single_Gauss(x,f,a1,x01,s1)
+            svoigt, I, v_errs=fit_Voigt(x,f,x01)
         elif fit_other==False or np.abs(x01-x01s)>det_level:
             gausf=np.zeros_like(f)
             eqw_gf=-99.9
             eqw_gf_err=99.9
-        
-#####################################################################
-#Fit Voigt profile
-        A_voigt=0.1
-        alphaD=0.01
-        alphaL=0.01
-        nu_0=x01
-        pv0=[alphaD, alphaL, nu_0, A_voigt]
-                
-        if fit_other==True:
-            voigt_p=so.leastsq(res_v,pv0,
-                    args=([x[il:iu],1.0-f[il:iu],np.ones_like(x[il:iu])]),
-                    full_output=1)
-                               
-            alphaD,alphaL, nu_0, A_voigt=voigt_p[0]
-            svoigt=Voigt(x,alphaD,alphaL, nu_0, A_voigt,0.,0.)
-            I=voigt_p[0][3]*1000.
-            v_errs=leastsq_errors(voigt_p,4)[0][3]
-
-        elif fit_other==False or np.abs(x01-nu_0)>det_level:
             svoigt=np.zeros_like(f)
             I=-99.9
             v_errs=99.9
+        
 
 #######################################################################        
 #Check sigmas for o-c diagrams around selected line
