@@ -205,7 +205,28 @@ def fit_single_Gauss(x,f,a1,x01,s1):
 
     gf_errs=leastsq_errors(gaus_p,3)
     eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(s1s))
+
     return gausf,eqw_gf,eqw_gf_err
+
+def fit_multi_Gauss(x,f,strong_lines):
+    params=np.ones((len(strong_lines),3))
+    params[:,0]=strong_lines #first columns = x0
+    params[:,2]=0.05 #starting value for gauss fit
+        
+    new_params=np.array([])
+
+    #First run
+    while params.shape[0]!=new_params.shape[0] and params.shape[0]>0.:
+        plsq=so.leastsq(res_mg,params,
+             args=(x,1.0-f,params.shape[0]),full_output=1)
+        new_params= np.reshape(plsq[0],(params.shape[0],3))
+        #evaluate  run
+        ind=np.where(np.abs(params[:,0]-new_params[:,0]<det_level))
+        params=new_params[ind]
+        
+    mg_errs=leastsq_errors(plsq,3)
+    
+    return params,mg_errs
 
 ######################################################
 #Voigt fitting
@@ -260,9 +281,19 @@ def fit_Voigt(x,f,x01):
     v_errs=leastsq_errors(voigt_p,4)[0][3]
     
     return svoigt,I,v_errs
-
-
-
+######################################################
+#Other
+######################################################
+def pm_3sig(x,x01,s1):
+    iu=np.abs(x-x01-3.0*np.abs(s1)).argmin()
+    il=np.abs(x-x01+3.0*np.abs(s1)).argmin()
+    
+    if iu==il or np.abs(iu-il)<10.:
+        il=0
+        iu=len(x)
+            
+    return il,iu
+    
 ######################################################
 #Ploting functions
 ######################################################        
@@ -385,36 +416,19 @@ for file_name in file_list:
         strong_lines,noise=find_strong_lines(x,gggf,gggf_infm,r_lvl,SN)
         strong_lines=evaluate_lines(line,strong_lines,det_level,gggf_infm)
         
-        ch_s_l=True
+        ch_s_l=False
         #check strong lines
         while ch_s_l:
             ch_s_l=plot_strong_lines(x,f,gggf_infm,strong_lines)
         
-
         if len(strong_lines)==0:
             continue
                 
         print "I see", len(strong_lines),"line(s) in this range"
         
-        params=np.ones((len(strong_lines),3))
-        vparams=np.zeros((len(strong_lines),4))
- 
  ####################################################################
  #Fit multiple gaussian profile
-        params[:,0]=strong_lines #first columns = x0
-        params[:,2]=0.05 #starting value for gauss fit
-        
-        new_params=np.array([])
-
-        #First run
-        while params.shape[0]!=new_params.shape[0] and params.shape[0]>0.:
-            plsq=so.leastsq(res_mg,params,args=(x,1.0-f,params.shape[0]),full_output=1)
-            new_params= np.reshape(plsq[0],(params.shape[0],3))
-            #evaluate  run
-            ind=np.where(np.abs(params[:,0]-new_params[:,0]<det_level))
-            params=new_params[ind]
-        
-        mg_errs=leastsq_errors(plsq,3)
+        params, mg_errs = fit_multi_Gauss(x,f,strong_lines)
 
         if params.shape[0]==0:
             print "Line ",line, "was not detected"
@@ -427,32 +441,19 @@ for file_name in file_list:
         eqw=a1*np.sqrt(2*np.pi)*np.abs(s1)*1000.
         eqw_err= eqw*(mg_errs[ip,1]/a1+mg_errs[ip,2]/np.abs(s1))
 
-#Calculate single gauss profile (this gauss is a part of multigaussian fit)
+        #Calculate single gauss profile 
+        #(this gauss is a part of multigaussian fit)
         sgaus=gaus(x,a1,x01,s1)
- ####################################################################3
- #Determine region close to gaussian line center#
-        iu=np.abs(x-x01-3.0*np.abs(s1)).argmin()
-        il=np.abs(x-x01+3.0*np.abs(s1)).argmin()
-        if ((iu==il) or (np.abs(iu-il)<10.)):
-           print line, elem_id,"Sigma is to low"
-           fit_other=False
-        else:
-           fit_other=True
-                                                 
+
+        #Determine region close to gaussian line center#
+        il, iu = pm_3sig(x,x01,s1)
+                                                         
 ######################################################################
 #Fit single Gauss and Voigt profile
-        if fit_other==True: 
-            gausf,eqw_gf,eqw_gf_err=fit_single_Gauss(x,f,a1,x01,s1)
-            svoigt, I, v_errs=fit_Voigt(x,f,x01)
-        elif fit_other==False or np.abs(x01-x01s)>det_level:
-            gausf=np.zeros_like(f)
-            eqw_gf=-99.9
-            eqw_gf_err=99.9
-            svoigt=np.zeros_like(f)
-            I=-99.9
-            v_errs=99.9
+        vparams=np.zeros((len(strong_lines),4))
+        gausf,eqw_gf,eqw_gf_err=fit_single_Gauss(x,f,a1,x01,s1)
+        svoigt, I, v_errs=fit_Voigt(x,f,x01)
         
-
 #######################################################################        
 #Check sigmas for o-c diagrams around selected line
         s_oc_mg = np.average(np.abs(f[il:iu]-1.0+mgaus[il:iu]))
