@@ -296,6 +296,15 @@ def pm_3sig(x,x01,s1):
             
     return il,iu
 
+def append_to_dict(tab,lbl,fc,param,eqw,eqw_err,soc):
+    tab[lbl].append(fc)
+    tab[lbl].append(param)
+    tab[lbl].append(eqw)
+    tab[lbl].append(eqw_err)
+    tab[lbl].append(soc)
+
+    return tab
+
 def find_eqws(line,x,f,strong_lines):
     results = {'mg':[], 'sg':[],'g':[],'v':[]}    
     #Fit multiple gaussian profile
@@ -304,54 +313,41 @@ def find_eqws(line,x,f,strong_lines):
     if params.shape[0]==0:
         print "Line ",line, "was not detected"
 #        continue
+
     mgaus=multiple_gaus(x,params)
-    results['mg'].append(mgaus)
-    results['mg'].append(params)
     
     ip= np.abs(params[:,0]-line).argmin()
     x01,a1,s1= params[ip,:]    
     
     eqw=a1*np.sqrt(2*np.pi)*np.abs(s1)*1000.
     eqw_err= eqw*(mg_errs[ip,1]/a1+mg_errs[ip,2]/np.abs(s1))
-    results['mg'].append(eqw)
-    results['mg'].append(eqw_err)
     
     #Calculate single gauss profile 
     #(this gauss is a part of multigaussian fit)
     sgaus=gaus(x,a1,x01,s1)
-    
-    results['sg'].append(sgaus)
-    results['sg'].append([a1,x01,s1])    
-    results['sg'].append(eqw)
-    results['sg'].append(eqw_err)
+    sparams=[a1,x01,s1]    
 
     #Determine region close to gaussian line center#
     #plus minus 3 sigma
     il, iu = pm_3sig(x,x01,s1)
-                                                         
+    
+    oc_mg=np.average(np.abs(f[il:iu]-1.0+mgaus[il:iu]))
+    oc_sg=np.average(np.abs(f[il:iu]-1.0+sgaus[il:iu]))
+    
+    results=append_to_dict(results,'mg',mgaus,params,eqw,eqw_err,oc_mg)
+    results=append_to_dict(results,'sg',sgaus,sparams,eqw,eqw_err,oc_sg)                                                         
+
     #Fit single Gauss and Voigt profile
     vparams=np.zeros((len(strong_lines),4))
     eqw_gf,eqw_gf_err,gparams=fit_single_Gauss(x[il:iu],f[il:iu],a1,x01,s1)
     gausf=gaus(x,gparams[0],gparams[1],gparams[2])    
-
-    results['g'].append(gausf)
-    results['g'].append([gparams])    
-    results['g'].append(eqw_gf)
-    results['g'].append(eqw_gf_err)
-
+    oc_g=np.average(np.abs(f[il:iu]-1.0+gausf[il:iu]))
+    results=append_to_dict(results,'g',gausf,gparams,eqw_gf,eqw_gf_err,oc_g)       
     
     I, v_errs,vpar=fit_Voigt(x[il:iu],f[il:iu],x01)
     svoigt=Voigt(x,vpar[0],vpar[1], vpar[2], vpar[3],0.,0.)    
-    results['v'].append(svoigt)
-    results['v'].append([vpar])    
-    results['v'].append(I)
-    results['v'].append(v_errs)
-    
-    #Check the goodnes of dit for o-c diagrams around selected line
-    results['mg'].append(np.average(np.abs(f[il:iu]-1.0+mgaus[il:iu])))
-    results['sg'].append(np.average(np.abs(f[il:iu]-1.0+sgaus[il:iu])))
-    results['g'].append(np.average(np.abs(f[il:iu]-1.0+gausf[il:iu])))
-    results['v'].append(np.average(np.abs(f[il:iu]-1.0+svoigt[il:iu])))
+    oc_v=np.average(np.abs(f[il:iu]-1.0+svoigt[il:iu]))
+    results=append_to_dict(results,'v',svoigt,vpar,I,v_errs,oc_v)       
 
     return results
     
@@ -426,10 +422,10 @@ line_list_file = config.get('Input files','line_list_file')
 lines=np.loadtxt(line_list_file) #Format: line element extitation_potential loggf, 
                                  #all in MOOG like format, especially element
 
-off=config.getfloat('Spectrum','off')
-s_factor=config.getfloat('Spectrum','s_factor')
-rejt_auto=config.getboolean('Spectrum','rejt_auto')
-rejt=config.getfloat('Spectrum','rejt')
+off = config.getfloat('Spectrum','off')
+s_factor = config.getfloat('Spectrum','s_factor')
+rejt_auto = config.getboolean('Spectrum','rejt_auto')
+rejt = config.getfloat('Spectrum','rejt')
 #if rejt_auto is True, rejt from config file will be ignored
 
 r_lvl = config.getfloat('Lines','r_lvl')
