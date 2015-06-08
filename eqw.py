@@ -197,16 +197,16 @@ def res_mg(p,x,y,nb):
     
 def fit_single_Gauss(x,f,a1,x01,s1):
     gaus_p = so.leastsq(res_g,[a1,x01,s1],
-             args=([x[il:iu],1.0-f[il:iu]]),
+             args=([x,1.0-f]),
              full_output=1)
     a1s,x01s,s1s=gaus_p[0]
-    gausf=gaus(x,a1s,x01s,s1s)
+
     eqw_gf=a1s*np.sqrt(2*np.pi)*np.abs(s1s)*1000.
 
     gf_errs=leastsq_errors(gaus_p,3)
     eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(s1s))
 
-    return gausf,eqw_gf,eqw_gf_err
+    return eqw_gf,eqw_gf_err,gaus_p[0]
 
 def fit_multi_Gauss(x,f,strong_lines):
     params=np.ones((len(strong_lines),3))
@@ -272,15 +272,17 @@ def fit_Voigt(x,f,x01):
     pv0=[alphaD, alphaL, nu_0, A_voigt]
                 
     voigt_p = so.leastsq(res_v,pv0,
-              args=([x[il:iu],1.0-f[il:iu],np.ones_like(x[il:iu])]),
+              args=([x,1.0-f,np.ones_like(x)]),
               full_output=1)
                                
     alphaD,alphaL, nu_0, A_voigt=voigt_p[0]
-    svoigt=Voigt(x,alphaD,alphaL, nu_0, A_voigt,0.,0.)
+
     I=voigt_p[0][3]*1000.
     v_errs=leastsq_errors(voigt_p,4)[0][3]
     
-    return svoigt,I,v_errs
+    return I,v_errs,voigt_p[0]
+    
+
 ######################################################
 #Other
 ######################################################
@@ -293,7 +295,105 @@ def pm_3sig(x,x01,s1):
         iu=len(x)
             
     return il,iu
+
+def find_eqws(line,x,f,strong_lines):
+    results = {'mg':[], 'sg':[],'g':[],'v':[]}    
+    #Fit multiple gaussian profile
+    params, mg_errs = fit_multi_Gauss(x,f,strong_lines)
+
+    if params.shape[0]==0:
+        print "Line ",line, "was not detected"
+#        continue
+    mgaus=multiple_gaus(x,params)
+    results['mg'].append(mgaus)
+    results['mg'].append(params)
     
+    ip= np.abs(params[:,0]-line).argmin()
+    x01,a1,s1= params[ip,:]    
+    
+    eqw=a1*np.sqrt(2*np.pi)*np.abs(s1)*1000.
+    eqw_err= eqw*(mg_errs[ip,1]/a1+mg_errs[ip,2]/np.abs(s1))
+    results['mg'].append(eqw)
+    results['mg'].append(eqw_err)
+    
+    #Calculate single gauss profile 
+    #(this gauss is a part of multigaussian fit)
+    sgaus=gaus(x,a1,x01,s1)
+    
+    results['sg'].append(sgaus)
+    results['sg'].append([a1,x01,s1])    
+    results['sg'].append(eqw)
+    results['sg'].append(eqw_err)
+
+    #Determine region close to gaussian line center#
+    #plus minus 3 sigma
+    il, iu = pm_3sig(x,x01,s1)
+                                                         
+    #Fit single Gauss and Voigt profile
+    vparams=np.zeros((len(strong_lines),4))
+    eqw_gf,eqw_gf_err,gparams=fit_single_Gauss(x[il:iu],f[il:iu],a1,x01,s1)
+    gausf=gaus(x,gparams[0],gparams[1],gparams[2])    
+
+    results['g'].append(gausf)
+    results['g'].append([gparams])    
+    results['g'].append(eqw_gf)
+    results['g'].append(eqw_gf_err)
+
+    
+    I, v_errs,vpar=fit_Voigt(x[il:iu],f[il:iu],x01)
+    svoigt=Voigt(x,vpar[0],vpar[1], vpar[2], vpar[3],0.,0.)    
+    results['v'].append(svoigt)
+    results['v'].append([vpar])    
+    results['v'].append(I)
+    results['v'].append(v_errs)
+    
+    #Check the goodnes of dit for o-c diagrams around selected line
+    results['mg'].append(np.average(np.abs(f[il:iu]-1.0+mgaus[il:iu])))
+    results['sg'].append(np.average(np.abs(f[il:iu]-1.0+sgaus[il:iu])))
+    results['g'].append(np.average(np.abs(f[il:iu]-1.0+gausf[il:iu])))
+    results['v'].append(np.average(np.abs(f[il:iu]-1.0+svoigt[il:iu])))
+
+    return results
+    
+def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
+    if rslt['mg'][3]>0.5*rslt['mg'][2]:
+        print "Huge error!", rslt['mg'][2],rslt['mg'][3]
+        hu=True
+    else:
+        hu=False
+            
+    if rslt['v'][4]<rslt['mg'][4] and rslt['v'][4]<rslt['g'][4] and rslt['mg'][4]>v_lvl:
+        print "using Voigt profile"
+        eqw = rslt['v'][2]
+        eqw_err = rslt['v'][3]
+    elif rslt['g'][4]<rslt['mg'][4] and rslt['mg'][2]<v_lvl:
+        print "using single Gauss fit"
+        eqw=rslt['g'][2]
+        eqw_err=rslt['g'][3]
+    elif hu==True and rslt['g'][4]<rslt['sg'][4]:
+        print "using single Gauss fit"
+        eqw=rslt['g'][2]
+        eqw_err=rslt['g'][3]
+    else:
+        eqw=rslt['mg'][2]
+        eqw_err=rslt['mg'][3]
+        
+    if (eqw>h_eqw or eqw<l_eqw):
+        print eqw
+        print "Line is to strong or to weak"
+        eqw = -99.9
+        eqw_err = 99.9
+    
+    x01=rslt['sg'][1][1]
+    if np.abs(line-x01)>det_level:
+        print line,elem_id, "line outside the det_level range"
+        eqw = -99.9
+        eqw_err = 99.9
+            
+    eqw=round(eqw,2)
+    
+    return eqw,eqw_err
+
 ######################################################
 #Ploting functions
 ######################################################        
@@ -307,24 +407,12 @@ def onclick(event):
     plt.draw()   
     strong_lines.append(gggf_infm[ind])
 
-def plot_strong_lines(x,f,gggf_infm,strong_lines):
-    plt.plot(x,f,color='k',label='obs_spec')
-    plt.plot(gggf_infm, np.ones_like(gggf_infm),'o',color='b',label='flex')
-    for elem in strong_lines:
-        plt.axvline(elem,color='r')
-    plt.plot(strong_lines, np.ones_like(strong_lines),'o',color='r',label='strong')
-    plt.gcf().canvas.mpl_connect('button_press_event',onclick)
-    
-    plt.pause(0.1)
+def ontype(event):
+    if event.key=='enter':
+        fit_again=True
+    else:
+        fit_again=False
 
-    flg=raw_input()
-    if flg=='r': 
-        flg=True
-    elif flg=='q':
-        flg=False
-    plt.clf()
-    return flg
- 
 ######################################################
 ######################################################
 #Read config file
@@ -416,131 +504,95 @@ for file_name in file_list:
         strong_lines,noise=find_strong_lines(x,gggf,gggf_infm,r_lvl,SN)
         strong_lines=evaluate_lines(line,strong_lines,det_level,gggf_infm)
         
-        ch_s_l=False
-        #check strong lines
-        while ch_s_l:
-            ch_s_l=plot_strong_lines(x,f,gggf_infm,strong_lines)
-        
         if len(strong_lines)==0:
             continue
                 
         print "I see", len(strong_lines),"line(s) in this range"
         
- ####################################################################
- #Fit multiple gaussian profile
-        params, mg_errs = fit_multi_Gauss(x,f,strong_lines)
-
-        if params.shape[0]==0:
-            print "Line ",line, "was not detected"
-            continue
-        ip= np.abs(params[:,0]-line).argmin()
-        x01,a1,s1= params[ip,:]
-        
-        mgaus=multiple_gaus(x,params)
-        line=round(line,2)
-        eqw=a1*np.sqrt(2*np.pi)*np.abs(s1)*1000.
-        eqw_err= eqw*(mg_errs[ip,1]/a1+mg_errs[ip,2]/np.abs(s1))
-
-        #Calculate single gauss profile 
-        #(this gauss is a part of multigaussian fit)
-        sgaus=gaus(x,a1,x01,s1)
-
-        #Determine region close to gaussian line center#
-        il, iu = pm_3sig(x,x01,s1)
-                                                         
-######################################################################
-#Fit single Gauss and Voigt profile
-        vparams=np.zeros((len(strong_lines),4))
-        gausf,eqw_gf,eqw_gf_err=fit_single_Gauss(x,f,a1,x01,s1)
-        svoigt, I, v_errs=fit_Voigt(x,f,x01)
-        
-#######################################################################        
-#Check sigmas for o-c diagrams around selected line
-        s_oc_mg = np.average(np.abs(f[il:iu]-1.0+mgaus[il:iu]))
-        s_oc_sg = np.average(np.abs(f[il:iu]-1.0+sgaus[il:iu]))
-        s_oc_gf = np.average(np.abs(f[il:iu]-1.0+gausf[il:iu]))
-        s_oc_v  = np.average(np.abs(f[il:iu]-1.0+svoigt[il:iu]))
-        
-        print "sgaus o-c", s_oc_sg  
-        print "mgaus o-c", s_oc_mg, round(eqw,2), eqw_err
-        print " gaus o-c", s_oc_gf, round(eqw_gf,2),eqw_gf_err
-        print "voigt o-c", s_oc_v, round(I,2),v_errs
-######################################################################  
-#Check if EW is reasonable      
-        if eqw_err>0.5*eqw:
-            print "Huge error!", eqw,eqw_err
-            hu=True
-        else:
-            hu=False
-            
-        if s_oc_v<s_oc_mg and s_oc_v<s_oc_gf and eqw>v_lvl:
-            print "using Voigt profile"
-            eqw = round(I,2)
-            eqw_err = v_errs
-        elif s_oc_gf<s_oc_mg and eqw<v_lvl:
-            print "using single Gauss fit"
-            eqw=eqw_gf
-            eqw_err=eqw_gf_err
-        elif hu==True and s_oc_gf<s_oc_sg:
-            print "using single Gauss fit"
-            eqw=eqw_gf
-            eqw_err=eqw_gf_err
-                 
-        if (eqw>h_eqw or eqw<l_eqw):
-            print eqw
-            print "Line is to strong or to weak"
-            eqw = -99.9
-            eqw_err = 99.9
-        if np.abs(line-x01)>det_level:
-            print line,elem_id, "line outside the det_level range"
-            eqw = -99.9
-            eqw_err = 99.9
-            
-        eqw=round(eqw,2)
-
 ########################################################################        
-        moog= "%10s%10s%10s%10s%10s%10s%10s %s %s %s\n" % \
-               (line,elem_id,exc_p,loggf,'','',eqw,eqw_err,round(s1,3),round(a1,3)) 
-        plt.ion()
         if line in show_lines and plot_flag==False:
             plot_line=True
         elif line not in show_lines and plot_flag==False:
             plot_line=False
         else:
             plot_line=True
+
+        plt.ion()        
+        
+        if not plot_line:
+        #do all fits: multi gauss, sgauss (part of multi gauss),
+        # gauss fitted in small area, voigt fitted in small area
+            r_tab = find_eqws(line,x,f,strong_lines) #results tab
+        #Check if EW is reasonable
+            eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
+        #Write to output file
+            moog= "%10s%10s%10s%10s%10s%10s%10s %s \n" % \
+               (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)        
+            out_file.write(moog)
+            print moog+"\n"            
         
         #Ploting module - 
-        if plot_line:# and eqw>0.):
-            ax1=fig.add_subplot(2,1,1)
+        else:
+            lstyle={'mg':['b','-','multi Gauss'],
+                    'sg':['b',':','line in mGauss'],
+                     'g':['y','-','Gauss'],
+                     'v':['m','-','Voigt']}
+            
             x_formatter = matplotlib.ticker.ScalarFormatter(useOffset=False)
-            ax1.xaxis.set_major_formatter(x_formatter)
-            print "\n"+moog
-            ax1.plot(x,f,'o',color= 'k' , label='spectrum')
-            ax1.plot(x, 1.0-svoigt,label='voigt',color='c')
-            ax1.plot(x,1.0-sgaus,color='m',label="part of mgaus")
-            ax1.plot(x,1.0-gausf,color='y',label="fitted gaus")
-            ax1.axvspan(x01-3.0*s1,x01+3.0*s1,color='g',alpha=0.25)
-            ax1.plot(x,1.0-mgaus,'b',label='multi gaus')
-            ax1.axvline(x01,color='r',lw=1.5,label=line)
-            ax1.axhline(1.0,color='g')
-            for oline in params[:,0]:
-                ax1.axvline(oline,c='r',zorder=1)
-            ax1.set_xlim(line-off,line+off)
-            ax1.set_xlabel("Wavelenght")
-            ax1.legend(loc=3,numpoints=1,fontsize='10')        
-            ax1.set_title(str(elem_id)+" "+str(line))           
-            ax1.set_ylim(min(f)-0.1,1.1) 
 
-            ax2=fig.add_subplot(2,1,2,sharex=ax1)
-            ax2.plot(x,np.zeros_like(x))
-            ax2.plot(x,gggf,'c', label='3rd derivative')
-            ax2.axhline(noise,c='r')
-            ax2.axhline(-noise,c='r')
-            ax2.plot(gggf_infm, np.zeros_like(gggf_infm),'o',color='b',label='flex points + -> -')
-            ax2.set_ylim(np.min(gggf),np.max(gggf))
-            ax2.set_xlim(line-off,line+off)
-            ax2.legend(loc=3,numpoints=1,fontsize='10')                
-            plt.pause(0.1)
+            fit_again=True
+            while fit_again:
+                r_tab = find_eqws(line,x,f,strong_lines)
+                eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
+                moog= "%10s%10s%10s%10s%10s%10s%10s %s \n" % \
+                      (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)        
+                print moog
+                
+                ax1=fig.add_subplot(2,1,1)
+                ax1.xaxis.set_major_formatter(x_formatter)
+                ax1.plot(x,f,'o',color= 'k' , label='spectrum')
+            
+                for lbl in r_tab:
+                    ax1.plot(x,1.0-r_tab[lbl][0],
+                        color = lstyle[lbl][0],
+                        ls =    lstyle[lbl][1],
+                        label = lstyle[lbl][2])            
+                x01=r_tab['sg'][1][1]
+                s1=r_tab['sg'][1][2]
+                ax1.axvspan(x01-3.0*s1,x01+3.0*s1,color='g',alpha=0.25)
+
+                ax1.axvline(x01,color='r',lw=1.5,label=line)
+                ax1.axhline(1.0,color='g')
+                for oline in r_tab['mg'][1][:,0]:
+                    ax1.axvline(oline,c='r',zorder=1)
+                ax1.set_xlim(line-off,line+off)
+                ax1.set_xlabel("Wavelenght")
+                ax1.legend(loc=3,numpoints=1,fontsize='10')        
+                ax1.set_title(str(elem_id)+" "+str(line))           
+                ax1.set_ylim(min(f)-0.1,1.1) 
+
+                ax2=fig.add_subplot(2,1,2,sharex=ax1)
+                ax2.plot(x,np.zeros_like(x))
+                ax2.plot(x,gggf,'c', label='3rd derivative')
+                ax2.axhline(noise,c='r')
+                ax2.axhline(-noise,c='r')
+                ax2.plot(gggf_infm, np.zeros_like(gggf_infm),'o',color='b',label='flex points + -> -')
+                ax2.plot(strong_lines,np.zeros_like(strong_lines),'o',color='r',label="strong lines")
+                ax2.set_ylim(np.min(gggf),np.max(gggf))
+                ax2.set_xlim(line-off,line+off)
+                ax2.legend(loc=3,numpoints=1,fontsize='10')                
+                plt.gcf().canvas.mpl_connect('button_press_event',onclick)
+#                plt.gcf().canvas.mpl_connect('key_press_event',ontype)
+                               
+                plt.pause(0.1)
+                print "Click on plot to add line and press 'f' to fit \n or any key to move on"
+                ask=raw_input()
+                if ask != 'f':
+                    fit_again=False
+                plt.clf()
+                #In case you add one point more than once
+                a= set(strong_lines)
+                strong_lines=list(a)
             
             print "Do you want to write result to file?(y/n/q) (default:yes)"            
             wait=raw_input()
@@ -553,7 +605,3 @@ for file_name in file_list:
                 out_file.write(moog)
             plt.clf()
             print "############################\n"
-        
-        else:
-            print moog+"\n"
-            out_file.write(moog)
