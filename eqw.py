@@ -403,7 +403,8 @@ def onclick(event):
     toolbar = plt.get_current_fig_manager().toolbar
     if event.button==1 and toolbar.mode=='':
         ind= np.abs((gggf_infm-event.xdata)).argmin()
-        plt.plot(gggf_infm[ind],1.0,'o',color='r',mec='b',picker=5,label='line_pnt')
+        ax2.plot(gggf_infm[ind],1.0,'o',color='r',mec='b',picker=5,label='line_pnt')
+        ax1.axvline(gggf_infm[ind],c='r',ls=":",zorder=1)
     plt.draw()   
     strong_lines.append(gggf_infm[ind])
 
