@@ -400,15 +400,70 @@ def onclick(event):
     if event.button==1 and toolbar.mode=='':
         ind= np.abs((gggf_infm-event.xdata)).argmin()
         ax2.plot(gggf_infm[ind],1.0,'o',color='r',mec='b',picker=5,label='line_pnt')
-        ax1.axvline(gggf_infm[ind],c='r',ls=":",zorder=1)
+        ax1.axvline(gggf_infm[ind],c='r',ls=":",zorder=1,label='line_pnt')
     plt.draw()   
     strong_lines.append(gggf_infm[ind])
 
+def onpick(event):
+    # when the user clicks right on a continuum point, remove it
+    if event.mouseevent.button==3:
+        if hasattr(event.artist,'get_label') and event.artist.get_label()=='cont_pnt':
+            event.artist.remove()
+                            
 def ontype(event):
     if event.key=='enter':
-        fit_again=True
+        r_tab = find_eqws(line,x,f,strong_lines)
+        eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
+        moog= "%10s%10s%10s%10s%10s%10s%10s %s \n" % \
+                (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)
+        print moog
+        #Remove old fits before ploting new ones
+        plt.sca(ax1)
+        for artist in plt.gca().get_children():
+            if hasattr(artist,'get_label') and (artist.get_label() in lstyle[:,3] or 
+                artist.get_label()=="line" or artist.get_label()=='pm3s' or
+                artist.get_label()=='strong_lines' or  artist.get_label()=='line_pnt'):
+                artist.remove()        
+        plt.sca(ax2) 
+        for artist in plt.gca().get_children():
+            if hasattr(artist,'get_label') and (artist.get_label()=='strong_lines' 
+                or  artist.get_label()=='line_pnt'):
+                artist.remove()                
+        
+        #Plot new fits
+        for lbl in r_tab:
+            fit_style=np.squeeze(lstyle[np.where(lstyle[:,0]==lbl)])
+            ax1.plot(x,1.0-r_tab[lbl][0],
+                   color = fit_style[1],
+                   ls =    fit_style[2],
+                   label = fit_style[3])            
+                   
+        x01=r_tab['sg'][1][1]
+        s1=r_tab['sg'][1][2]
+        ax1.axvspan(x01-3.0*s1,x01+3.0*s1,color='g',alpha=0.25,label="pm3s")
+        ax1.legend(loc=3,numpoints=1,fontsize='10')
+        ax1.axvline(x01,color='r',lw=1.5,label="line")
+        for oline in r_tab['mg'][1][:,0]:
+            ax1.axvline(oline,c='r',zorder=1,label='strong_lines')
+
+        ax2.plot(strong_lines,np.zeros_like(strong_lines),'o',color='r',label="strong lines")
+
+    elif event.key=='q':
+        exit()
+    elif event.key=='w':
+        r_tab = find_eqws(line,x,f,strong_lines)
+        eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
+        moog= "%10s%10s%10s%10s%10s%10s%10s %s \n" % \
+             (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)
+        print "Writing to output file..."
+        print moog
+        out_file.write(moog)
+        print "Close the plot window to move on"
+        
     else:
-        fit_again=False
+        #if you accidentally hit any other key
+        pass
+    plt.draw()
 
 ######################################################
 ######################################################
@@ -437,8 +492,8 @@ plot_flag = config.getboolean('Lines','plot_flag')
 
 show_lines=np.array(config.get('Lines','show_lines').split(" "),dtype=float)
 
-if plot_flag == True or show_lines[0]!=0:
-    fig = plt.figure()
+#if plot_flag == True or show_lines[0]!=0:
+
 
 for file_name in file_list:
     file_name=file_name.strip()
@@ -514,7 +569,6 @@ for file_name in file_list:
         else:
             plot_line=True
 
-        plt.ion()        
         
         if not plot_line:
         #do all fits: multi gauss, sgauss (part of multi gauss),
@@ -530,75 +584,55 @@ for file_name in file_list:
         
         #Ploting module - 
         else:
-            lstyle={'mg':['b','-','multi Gauss'],
-                    'sg':['b',':','line in mGauss'],
-                     'g':['y','-','Gauss'],
-                     'v':['m','-','Voigt']}
-            
+            fig = plt.figure()
+            interactive_mode=True
+            #Things that won't be changed
+            lstyle=np.array([['mg','b','-','multi Gauss'],
+                    ['sg','b',':','line in mGauss'],
+                    [ 'g', 'y','-','Gauss'],
+                    [ 'v', 'm','-','Voigt']])
+
             x_formatter = matplotlib.ticker.ScalarFormatter(useOffset=False)
-
-            fit_again=True
-            while fit_again:
-                r_tab = find_eqws(line,x,f,strong_lines)
-                eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
-                moog= "%10s%10s%10s%10s%10s%10s%10s %s \n" % \
-                      (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)        
-                print moog
-                
-                ax1=fig.add_subplot(2,1,1)
-                ax1.xaxis.set_major_formatter(x_formatter)
-                ax1.plot(x,f,'o',color= 'k' , label='spectrum')
+            ax1=fig.add_subplot(2,1,1)
+            ax1.xaxis.set_major_formatter(x_formatter)
+            ax1.plot(x,f,'o',color= 'k' , label='spectrum')
+            ax1.set_xlim(line-off,line+off)
+            ax1.axhline(1.0,color='g',label='continuum')
+            ax1.set_xlabel("Wavelenght")
+            ax1.legend(loc=3,numpoints=1,fontsize='10') 
+            ax1.set_ylim(min(f)-0.1,1.1)       
+            ax1.set_title(str(elem_id)+" "+str(line))           
             
-                for lbl in r_tab:
-                    ax1.plot(x,1.0-r_tab[lbl][0],
-                        color = lstyle[lbl][0],
-                        ls =    lstyle[lbl][1],
-                        label = lstyle[lbl][2])            
-                x01=r_tab['sg'][1][1]
-                s1=r_tab['sg'][1][2]
-                ax1.axvspan(x01-3.0*s1,x01+3.0*s1,color='g',alpha=0.25)
-
-                ax1.axvline(x01,color='r',lw=1.5,label=line)
-                ax1.axhline(1.0,color='g')
-                for oline in r_tab['mg'][1][:,0]:
-                    ax1.axvline(oline,c='r',zorder=1)
-                ax1.set_xlim(line-off,line+off)
-                ax1.set_xlabel("Wavelenght")
-                ax1.legend(loc=3,numpoints=1,fontsize='10')        
-                ax1.set_title(str(elem_id)+" "+str(line))           
-                ax1.set_ylim(min(f)-0.1,1.1) 
-
-                ax2=fig.add_subplot(2,1,2,sharex=ax1)
-                ax2.plot(x,np.zeros_like(x))
-                ax2.plot(x,gggf,'c', label='3rd derivative')
-                ax2.axhline(noise,c='r')
-                ax2.axhline(-noise,c='r')
-                ax2.plot(gggf_infm, np.zeros_like(gggf_infm),'o',color='b',label='flex points + -> -')
-                ax2.plot(strong_lines,np.zeros_like(strong_lines),'o',color='r',label="strong lines")
-                ax2.set_ylim(np.min(gggf),np.max(gggf))
-                ax2.set_xlim(line-off,line+off)
-                ax2.legend(loc=3,numpoints=1,fontsize='10')                
-                plt.gcf().canvas.mpl_connect('button_press_event',onclick)
-#                plt.gcf().canvas.mpl_connect('key_press_event',ontype)
+            ax2=fig.add_subplot(2,1,2,sharex=ax1)
+            ax2.plot(x,np.zeros_like(x))
+            ax2.plot(x,gggf,'c', label='3rd derivative')
+            ax2.axhline(noise,c='r')
+            ax2.axhline(-noise,c='r')
+            ax2.legend(loc=3,numpoints=1,fontsize='10')                
+            ax2.plot(gggf_infm, np.zeros_like(gggf_infm),'o',color='b',label='flex points + -> -')
+            ax2.set_ylim(np.min(gggf),np.max(gggf))
+            if not interactive_mode:
+                print "tu"
+                continue
+            plt.gcf().canvas.mpl_connect('key_press_event',ontype)
+            plt.gcf().canvas.mpl_connect('button_press_event',onclick)
                                
-                plt.pause(0.1)
-                print "Click on plot to add line and press 'f' to fit \n or any key to move on"
-                ask=raw_input()
-                if ask != 'f':
-                    fit_again=False
-                plt.clf()
-                #In case you add one point more than once
-                a= set(strong_lines)
-                strong_lines=list(a)
+
+            print interactive_mode
+
+            plt.show()           
+       #     print "Click on plot to add line and press 'f' to fit \n or any key to move on"
+       #         #In case you add one point more than once
+       #     a= set(strong_lines)
+       #     strong_lines=list(a)
             
-            print "Do you want to write result to file?(y/n/q) (default:yes)"            
-            wait=raw_input()
-           
-            if wait=='q':
-                exit()
-            elif wait=='n':
-                pass
-            else:
-                out_file.write(moog)
-            plt.clf()
+#            print "Do you want to write result to file?(y/n/q) (default:yes)"            
+#            wait=raw_input()
+#           
+#            if wait=='q':
+#                exit()
+#            elif wait=='n':
+#                pass
+#            else:
+#                out_file.write(moog)
             print "############################\n"
