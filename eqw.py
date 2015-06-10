@@ -382,11 +382,11 @@ def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
     else:
         hu=False
             
-    if rslt['v'][4]<rslt['mg'][4] and rslt['v'][4]<rslt['g'][4] and rslt['mg'][4]>v_lvl:
+    if rslt['v'][4]<rslt['mg'][4] and rslt['v'][4]<rslt['g'][4] and np.log10(rslt['mg'][2]*0.001/line)>v_lvl:
         print "using Voigt profile"
         eqw = rslt['v'][2]
         eqw_err = rslt['v'][3]
-    elif rslt['g'][4]<rslt['mg'][4] and rslt['mg'][2]<v_lvl:
+    elif rslt['g'][4]<rslt['mg'][4] and np.log10(rslt['mg'][2]*0.001/line)<v_lvl:
         print "using single Gauss fit"
         eqw=rslt['g'][2]
         eqw_err=rslt['g'][3]
