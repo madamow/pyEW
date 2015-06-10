@@ -194,6 +194,12 @@ def res_mg(p,x,y,nb):
     mg=multiple_gaus(x,params)
     err=1./np.abs(y)
     return (y-mg)/err
+
+def get_gew(ag,sg):
+    #calculate EW for gaussian profile
+    gew=ag*np.sqrt(2*np.pi)*np.abs(sg)*1000.
+    
+    return gew
     
 def fit_single_Gauss(x,f,a1,x01,s1):
     gaus_p = so.leastsq(res_g,[a1,x01,s1],
@@ -201,7 +207,7 @@ def fit_single_Gauss(x,f,a1,x01,s1):
              full_output=1)
     a1s,x01s,s1s=gaus_p[0]
 
-    eqw_gf=a1s*np.sqrt(2*np.pi)*np.abs(s1s)*1000.
+    eqw_gf=get_gew(a1s,s1s)
 
     gf_errs=leastsq_errors(gaus_p,3)
     eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(s1s))
@@ -350,8 +356,26 @@ def find_eqws(line,x,f,strong_lines):
     results=append_to_dict(results,'v',svoigt,vpar,I,v_errs,oc_v)       
 
     return results
+
+def print_line_info(rslt):
+    fit_labels={'mg':'multi Gauss','sg':'part of mGauss','g':'Gauss','v':'Voigt'}
+    for fit in rslt:
+        print "%15s %s %4.2f %s %f %s %f" % \
+        (fit_labels[fit],": EW =" ,rslt[fit][2],"eEW =",rslt[fit][3],"o-c:",rslt[fit][4])
+
+def print_mgauss_data(rslt):
+    #print full data for all lines 
+    #fitted with multi Gauss function
+    mg_params=rslt['mg'][1]
+    print "\n",mg_params.shape[0],"lines in multi gaussian fit:"
+    for gfit in  mg_params:
+        print "%4.2f %s%4.2f %s%4.3f %s%4.2f" % \
+              ( gfit[0], "depth=", gfit[1], "sigma:",gfit[2],"EW=",get_gew(gfit[1],gfit[2]))
+    print "\n"
+    
     
 def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
+    print_line_info(rslt)
     if rslt['mg'][3]>0.5*rslt['mg'][2]:
         print "Huge error!", rslt['mg'][2],rslt['mg'][3]
         hu=True
@@ -387,7 +411,6 @@ def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
         eqw_err = 99.9
             
     eqw=round(eqw,2)
-    
     return eqw,eqw_err
 
 ######################################################
@@ -401,23 +424,41 @@ def onclick(event):
         ind= np.abs((gggf_infm-event.xdata)).argmin()
         ax2.plot(gggf_infm[ind],1.0,'o',color='r',mec='b',picker=5,label='line_pnt')
         ax1.axvline(gggf_infm[ind],c='r',ls=":",zorder=1,label='line_pnt')
+        strong_lines.append(gggf_infm[ind])
+    elif event.button==3 and toolbar.mode=='':
+        ind= np.squeeze(np.where(np.abs(strong_lines-event.xdata)<0.01))
+        if ind:
+            ax2.plot(strong_lines[ind],1.0,'o',color='b',mec='r',picker=5,label='line_pnt')
+            ax1.axvline(strong_lines[ind],c='b',ls=":",zorder=1,label='line_pnt')
+            strong_lines.pop(ind)
     plt.draw()   
-    strong_lines.append(gggf_infm[ind])
+
         
 def onpick(event):
     # when the user clicks right on a continuum point, remove it
     if event.mouseevent.button==3:
-        if hasattr(event.artist,'get_label') and event.artist.get_label()=='cont_pnt':
-            event.artist.remove()
+        print "tu:"
+        ind= np.abs((gggf_infm-event.xdata)).argmin()
+        ax2.plot(gggf_infm[ind],1.0,'o',color='b',mec='r',picker=5,label='line_pnt')
+        ax1.axvline(gggf_infm[ind],c='b',ls=":",zorder=1,label='line_pnt')
+    plt.draw()
+#    strong_lines.pop(ind)
                             
 def ontype(event):
     if event.key=='enter':
-        print "\n", len(list(set(strong_lines))),"lines fitted"
-        r_tab = find_eqws(line,x,f,list(set(strong_lines)))
+        print "\n", len(list(set(strong_lines))),"lines to fit"
+        
+        r_tab = find_eqws(line,x,f,sorted(list(set(strong_lines))))
+        
+        print_mgauss_data(r_tab)
+
         eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
         moog= "%10s%10s%10s%10s%10s%10s%10s %s \n" % \
                 (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)
+        print "\n MOOG entry:"
         print moog
+        print "\n"
+
         #Remove old fits before ploting new ones
         plt.sca(ax1)
         for artist in plt.gca().get_children():
@@ -449,9 +490,11 @@ def ontype(event):
         
         ax2.plot(strong_lines,np.zeros_like(strong_lines),'o',color='r',label="strong lines")
         ax2.legend(loc=3,numpoints=1,fontsize='10',ncol=3)        
-        print "Click on plot to edit line list"
-        print " and hit enter to redo the plot"
+        print "Click on plot to edit line list:"
+        print "(left button - add lines, right - remove lines)."
+        print "Then hit enter to redo the plot"
         print "Type 'w' to write the result to output file"
+        print "q - quit"
 
     elif event.key=='q':
         exit()
@@ -616,9 +659,10 @@ for file_name in file_list:
             ax2.set_ylim(np.min(gggf),np.max(gggf))
             ax2.set_xlim(line-off,line+off)
             ax2.legend(loc=3,numpoints=1,fontsize='10',ncol=3)                            
-            print "Press enter to make fits"
+            print "Press enter to make a fit"
             plt.gcf().canvas.mpl_connect('key_press_event',ontype)
             plt.gcf().canvas.mpl_connect('button_press_event',onclick)
+#            plt.gcf().canvas.mpl_connect('pick_event',onpick)
                                
             plt.show()           
             print "############################\n"
