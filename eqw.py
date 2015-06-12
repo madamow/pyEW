@@ -227,7 +227,8 @@ def fit_multi_Gauss(x,f,strong_lines):
              args=(x,1.0-f,params.shape[0]),full_output=1)
         new_params= np.reshape(plsq[0],(params.shape[0],3))
         #evaluate  run
-        ind=np.where(np.abs(params[:,0]-new_params[:,0]<det_level))
+        ind=np.where(np.abs(strong_lines-new_params[:,0])<det_level)
+        strong_lines=np.array(strong_lines)[ind]
         params=new_params[ind]
         
     mg_errs=leastsq_errors(plsq,3)
@@ -318,7 +319,7 @@ def find_eqws(line,x,f,strong_lines):
 
     if params.shape[0]==0:
         print "Line ",line, "was not detected"
-#        continue
+        params=np.array([[9.9,9.9,9.9]])
 
     mgaus=multiple_gaus(x,params)
     
@@ -416,40 +417,12 @@ def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
 ######################################################
 #Ploting functions
 ######################################################        
-def onclick(event):
-    # when none of the toolbar buttons is activated and the user clicks in the
-    # plot somewhere,
-    toolbar = plt.get_current_fig_manager().toolbar
-    if event.button==1 and toolbar.mode=='':
-        ind= np.abs((gggf_infm-event.xdata)).argmin()
-        ax2.plot(gggf_infm[ind],1.0,'o',color='r',mec='b',picker=5,label='line_pnt')
-        ax1.axvline(gggf_infm[ind],c='r',ls=":",zorder=1,label='line_pnt')
-        strong_lines.append(gggf_infm[ind])
-    elif event.button==3 and toolbar.mode=='':
-        ind= np.squeeze(np.where(np.abs(strong_lines-event.xdata)<0.01))
-        if ind:
-            ax2.plot(strong_lines[ind],1.0,'o',color='b',mec='r',picker=5,label='line_pnt')
-            ax1.axvline(strong_lines[ind],c='b',ls=":",zorder=1,label='line_pnt')
-            strong_lines.pop(ind)
-    plt.draw()   
-
         
-def onpick(event):
-    # when the user clicks right on a continuum point, remove it
-    if event.mouseevent.button==3:
-        print "tu:"
-        ind= np.abs((gggf_infm-event.xdata)).argmin()
-        ax2.plot(gggf_infm[ind],1.0,'o',color='b',mec='r',picker=5,label='line_pnt')
-        ax1.axvline(gggf_infm[ind],c='b',ls=":",zorder=1,label='line_pnt')
-    plt.draw()
-#    strong_lines.pop(ind)
-                            
 def ontype(event):
     if event.key=='enter':
         print "\n", len(list(set(strong_lines))),"lines to fit"
         
         r_tab = find_eqws(line,x,f,sorted(list(set(strong_lines))))
-        
         print_mgauss_data(r_tab)
 
         eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
@@ -457,7 +430,15 @@ def ontype(event):
                 (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)
         print "\n MOOG entry:"
         print moog
-        print "\n"
+        
+        fsl= r_tab['mg'][1][:,0] #fitted strong lines
+        ndl_ind=[] #not detected lines index
+        for sline in strong_lines:
+           if not any(np.abs(sline-fsl)<det_level):
+               print "Line at", round(sline,2), "was not included in mGauss\n"
+               ndl_ind.append(sline)
+        for item in ndl_ind:
+            strong_lines.remove(item)
 
         #Remove old fits before ploting new ones
         plt.sca(ax1)
@@ -488,6 +469,8 @@ def ontype(event):
         for oline in r_tab['mg'][1][:,0]:
             ax1.axvline(oline,c='r',zorder=1,label='strong lines')
         
+    
+
         ax2.plot(strong_lines,np.zeros_like(strong_lines),'o',color='r',label="strong lines")
         ax2.legend(loc=3,numpoints=1,fontsize='10',ncol=3)        
         print "Click on plot to edit line list:"
@@ -512,6 +495,27 @@ def ontype(event):
         #if you accidentally hit any other key
         pass
     plt.draw()
+
+def onclick(event):
+    # when none of the toolbar buttons is activated and the user clicks in the
+    # plot somewhere,
+    toolbar = plt.get_current_fig_manager().toolbar
+    if event.button==1 and toolbar.mode=='':
+        ind= np.abs((gggf_infm-event.xdata)).argmin()
+        ax2.plot(gggf_infm[ind],1.0,'o',color='r',mec='b',picker=5,label='line_pnt')
+        ax1.axvline(gggf_infm[ind],c='r',ls=":",zorder=1,label='line_pnt')
+        strong_lines.append(gggf_infm[ind])
+    elif event.button==3 and toolbar.mode=='':
+        ind= np.squeeze(np.where(np.abs(strong_lines-event.xdata)<0.01))
+        try:
+            ax2.plot(strong_lines[ind],1.0,'o',color='b',mec='r',picker=5,label='line_pnt')
+            ax1.axvline(strong_lines[ind],c='b',ls=":",zorder=1,label='line_pnt')
+            strong_lines.pop(ind)
+        except TypeError:
+            print "I see more than one line close to your point"
+            print "I can't deal with that"
+    plt.draw()   
+
 
 ######################################################
 ######################################################
@@ -608,7 +612,6 @@ for file_name in file_list:
             continue
                 
         print "I see", len(strong_lines),"line(s) in this range"
-        
 ########################################################################        
         if line in show_lines and plot_flag==False:
             plot_line=True
@@ -617,7 +620,6 @@ for file_name in file_list:
         else:
             plot_line=True
 
-        
         if not plot_line:
         #do all fits: multi gauss, sgauss (part of multi gauss),
         # gauss fitted in small area, voigt fitted in small area
@@ -639,7 +641,7 @@ for file_name in file_list:
                     ['sg','b',':','line in mGauss'],
                     [ 'g', 'y','-','Gauss'],
                     [ 'v', 'm','-','Voigt']])
-
+            
             x_formatter = matplotlib.ticker.ScalarFormatter(useOffset=False)
             ax1=fig.add_subplot(2,1,1)
             ax1.xaxis.set_major_formatter(x_formatter)
@@ -662,7 +664,6 @@ for file_name in file_list:
             print "Press enter to make a fit"
             plt.gcf().canvas.mpl_connect('key_press_event',ontype)
             plt.gcf().canvas.mpl_connect('button_press_event',onclick)
-#            plt.gcf().canvas.mpl_connect('pick_event',onpick)
                                
             plt.show()           
             print "############################\n"
