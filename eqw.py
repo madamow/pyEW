@@ -138,13 +138,13 @@ def evaluate_lines(line,strong_lines,det_level,gggf_infm):
         print line, "was not detected"
     elif (len(strong_lines)==0 and (np.abs(gggf_infm-line).min()<det_level)):#no strong lines detected
         print "I see no strong lines here,but weak line close to", line,"was detected"
-        strong_lines=np.append(strong_lines,line) 
+        strong_lines.append(line) 
     elif (len(strong_lines)>0 and np.abs(gggf_infm-line).min()<det_level and np.abs(strong_lines-line).min()<det_level):
         print "line",line," was detected and it was classified as a strong line"
         pass
     elif (len(strong_lines)>0 and (np.abs(gggf_infm-line).min()<det_level) and np.abs(strong_lines-line).min()>det_level):
         print "I see this line at",line,", but it is weak"
-        strong_lines=np.append(strong_lines,line)
+        strong_lines.append(line)
     else:
         print line, "was not detected" 
     return strong_lines
@@ -438,7 +438,7 @@ def ontype(event):
                print "Line at", round(sline,2), "was not included in mGauss\n"
                ndl_ind.append(sline)
         for item in ndl_ind:
-            strong_lines.remove(item)
+            list(strong_lines).remove(item)
 
         #Remove old fits before ploting new ones
         plt.sca(ax1)
@@ -607,6 +607,7 @@ for file_name in file_list:
         #Identify strong lines automatically
         strong_lines,noise=find_strong_lines(x,gggf,gggf_infm,r_lvl,SN)
         strong_lines=evaluate_lines(line,strong_lines,det_level,gggf_infm)
+        print type(strong_lines)
         
         if len(strong_lines)==0:
             continue
