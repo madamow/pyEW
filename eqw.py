@@ -432,13 +432,16 @@ def ontype(event):
         print moog
         
         fsl= r_tab['mg'][1][:,0] #fitted strong lines
+        
         ndl_ind=[] #not detected lines index
         for sline in strong_lines:
            if not any(np.abs(sline-fsl)<det_level):
                print "Line at", round(sline,2), "was not included in mGauss\n"
                ndl_ind.append(sline)
+
         for item in ndl_ind:
-            list(strong_lines).remove(item)
+            strong_lines.remove(item)
+        print strong_lines
 
         #Remove old fits before ploting new ones
         plt.sca(ax1)
