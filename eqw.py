@@ -441,7 +441,6 @@ def ontype(event):
 
         for item in ndl_ind:
             strong_lines.remove(item)
-        print strong_lines
 
         #Remove old fits before ploting new ones
         plt.sca(ax1)
@@ -610,7 +609,6 @@ for file_name in file_list:
         #Identify strong lines automatically
         strong_lines,noise=find_strong_lines(x,gggf,gggf_infm,r_lvl,SN)
         strong_lines=evaluate_lines(line,strong_lines,det_level,gggf_infm)
-        print type(strong_lines)
         
         if len(strong_lines)==0:
             continue
@@ -653,7 +651,7 @@ for file_name in file_list:
             ax1.axhline(1.0,color='g',label='continuum')
             ax1.set_xlabel("Wavelenght")
             ax1.legend(loc=2,numpoints=1,fontsize='10') 
-            ax1.set_ylim(min(f)-0.1,1.4)       
+            ax1.set_ylim(min(f)-0.1,1+0.4*(1+0.1-min(f)))
             ax1.set_title(str(elem_id)+" "+str(line))           
            
             ax2=fig.add_subplot(2,1,2,sharex=ax1)
