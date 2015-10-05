@@ -6,7 +6,7 @@ To run this program you need those python libraries:
 *numpy
 http://docs.scipy.org/doc/numpy/user/install.html
 
-*scipy 
+*scipy (works with version 0.13)
 http://www.scipy.org/scipylib/download.html
 
 *matplotlib
