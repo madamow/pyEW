@@ -25,7 +25,7 @@ Line list
   wavelength, element (MOOG format), excitation potential, log gf
 
 Output file
-- is in format reqired by MOOG
+- is in format required by MOOG
 - some extra information are placed at the end of line,
   like estimated error, width of a line (gaussian sigma),line depth.
   They will be ignored by MOOG, but maybe useful in identification
