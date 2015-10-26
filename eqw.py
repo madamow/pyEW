@@ -8,6 +8,7 @@ from scipy.special import erf
 from scipy.special import wofz
 import ConfigParser
 import sys
+plt.switch_backend('tkAgg')
 
 ######################################################
 #Spectrum preparation
@@ -370,8 +371,11 @@ def print_mgauss_data(rslt):
     mg_params=rslt['mg'][1]
     print "\n",mg_params.shape[0],"lines in multi gaussian fit:"
     for gfit in  mg_params:
-        print "%4.2f %s%4.2f %s%4.3f %s%4.2f" % \
-              ( gfit[0], "depth=", gfit[1], "sigma:",gfit[2],"EW=",get_gew(gfit[1],gfit[2]))
+        print "%4.2f %s%4.2f %s%4.3f %s%4.3f %s%4.2f" % \
+              ( gfit[0], "depth=", gfit[1], \
+               "sigma:",gfit[2],\
+               "FWHM=",gfit[2]*2.*np.sqrt(2*np.log(2)),\
+               "EW=",get_gew(gfit[1],gfit[2]))
     print "\n"
     
     
@@ -461,7 +465,8 @@ def ontype(event):
             ax1.plot(x,1.0-r_tab[lbl][0],
                    color = fit_style[1],
                    ls =    fit_style[2],
-                   label = fit_style[3])            
+                   label = fit_style[3],
+                   zorder= fit_style[4])            
                    
         x01=r_tab['sg'][1][1]
         s1=r_tab['sg'][1][2]
@@ -582,7 +587,7 @@ for file_name in file_list:
 
         d=file[np.where((file[:,0]>line-off) &(file[:,0]<line+off))]
         if d.shape[0]==0:
-            print "Nothing to do in this range, probably gap in you spectra"
+            print "Nothing to do in this range, probably gap in your spectra"
             continue
         
         #Make spectrum linear
@@ -629,7 +634,7 @@ for file_name in file_list:
         #Check if EW is reasonable
             eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
         #Write to output file
-            moog= "%10s%10s%10s%10s%10s%10s%10s %s \n" % \
+            moog= "%10s%10s%10s%10s%10s%10s%10s %s %s \n" % \
                (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)        
             out_file.write(moog)
             print moog+"\n"            
@@ -639,10 +644,10 @@ for file_name in file_list:
             fig = plt.figure()
             interactive_mode=True
             #Things that won't be changed
-            lstyle=np.array([['mg','b','-','multi Gauss'],
-                    ['sg','b',':','line in mGauss'],
-                    [ 'g', 'y','-','Gauss'],
-                    [ 'v', 'm','-','Voigt']])
+            lstyle=np.array([['mg','c','-','multi Gauss',4],
+                    ['sg','b',':','line in mGauss',3],
+                    [ 'g', 'y','-','Gauss',2],
+                    [ 'v', 'm','-','Voigt',1]])
             
             x_formatter = matplotlib.ticker.ScalarFormatter(useOffset=False)
             ax1=fig.add_subplot(2,1,1)
@@ -656,10 +661,12 @@ for file_name in file_list:
            
             ax2=fig.add_subplot(2,1,2,sharex=ax1)
             ax2.plot(x,np.zeros_like(x))
-            ax2.plot(x,gggf,'c', label='3rd derivative')
+            ax2.plot(x,gggf,'b', label='3rd derivative')
+            #ax2.plot(x,gf*-500.,'m', label='3rd derivative')
             ax2.axhline(noise,c='r')
             ax2.axhline(-noise,c='r')
-            ax2.plot(gggf_infm, np.zeros_like(gggf_infm),'o',color='b',label='flex points + -> -')
+            ax2.plot(gggf_infm, np.zeros_like(gggf_infm),'o',color='b',
+                     label='flex points + -> -')
             ax2.set_ylim(np.min(gggf),np.max(gggf))
             ax2.set_xlim(line-off,line+off)
             ax2.legend(loc=3,numpoints=1,fontsize='10',ncol=3)                            
