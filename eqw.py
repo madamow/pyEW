@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib
+import matplotlib, copy
 from scipy import ndimage
 import scipy.optimize as so
 from scipy.signal import argrelextrema
@@ -8,7 +8,7 @@ from scipy.special import erf
 from scipy.special import wofz
 import ConfigParser
 import sys
-plt.switch_backend('tkAgg')
+#plt.switch_backend('tkAgg')
 
 ######################################################
 #Spectrum preparation
@@ -173,20 +173,27 @@ def leastsq_errors(fit_tab,p_no): #so.leastsq result+no of parameters fitted
 ######################################################
 #Gaussian fitting
 ######################################################
-def gaus(x,a,x0,sigma):
-    return a*np.exp(-(x-x0)**2/(2*sigma**2))
+def gaus(x,a,x0,fwhm):
+    return a*np.exp(-4*np.log(2)*(x-x0)**2/(fwhm**2))
 
 def multiple_gaus(x,params):
     mg=np.zeros_like(x)
     for row in params:
-        x0,a,sig=row
-        mg=mg+gaus(x,a,x0,sig)
+        x0,a,fwhm=row
+        mg=mg+gaus(x,a,x0,fwhm)
     return mg
 
 def res_g(p,data):
     x,y=data
-    a,x0,sig=p
-    sg=gaus(x,a,x0,sig)
+    a,x0,fwhm=p
+    sg=gaus(x,a,x0,fwhm)
+    err=1./np.abs(y)
+    return (y-sg)/err
+
+def res_d(p,data):
+    x,y,x0,fwhm=data
+    a=p
+    sg=gaus(x,a,x0,fwhm)
     err=1./np.abs(y)
     return (y-sg)/err
     
@@ -195,23 +202,31 @@ def res_mg(p,x,y,nb):
     mg=multiple_gaus(x,params)
     err=1./np.abs(y)
     return (y-mg)/err
+    
 
-def get_gew(ag,sg):
+def get_gew(ag,fwhmg):
     #calculate EW for gaussian profile
-    gew=ag*np.sqrt(2*np.pi)*np.abs(sg)*1000.
+    gew=0.5*ag*np.sqrt(np.pi)*np.abs(fwhmg)*1000./np.sqrt(np.log(2))
     
     return gew
+
+def fit_depth_Gauss(x,f,a1,x01,fwhm1):
+    gaus_d = so.leastsq(res_d,[a1],
+             args=([x,1.0-f,x01,fwhm1]),
+             full_output=1)
+    return gaus_d[0]
     
-def fit_single_Gauss(x,f,a1,x01,s1):
-    gaus_p = so.leastsq(res_g,[a1,x01,s1],
+def fit_single_Gauss(x,f,a1,x01,fwhm1):
+    gaus_p = so.leastsq(res_g,[a1,x01,fwhm1],
              args=([x,1.0-f]),
              full_output=1)
-    a1s,x01s,s1s=gaus_p[0]
+    a1s,x01s,fwhm1s=gaus_p[0]
 
-    eqw_gf=get_gew(a1s,s1s)
+    eqw_gf=get_gew(a1s,fwhm1s)
 
     gf_errs=leastsq_errors(gaus_p,3)
-    eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(s1s))
+    eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(fwhm1s))
+    
 
     return eqw_gf,eqw_gf_err,gaus_p[0]
 
@@ -257,6 +272,7 @@ def Voigt(nu, alphaD, alphaL, nu_0, A, a, b):
     y = alphaL/alphaD * f
     backg = a + b*nu 
     V = A*f/(alphaD*np.sqrt(np.pi)) * voigt(x, y) + backg
+
     return V
 
 def funcV(p, x):
@@ -287,16 +303,23 @@ def fit_Voigt(x,f,x01):
 
     I=voigt_p[0][3]*1000.
     v_errs=leastsq_errors(voigt_p,4)[0][3]
-    
+
     return I,v_errs,voigt_p[0]
+
+def voigt_fwhm(alphaD,alphaL):
+    c1 = 1.0692
+    c2 = 0.86639
+    v_fwhm = c1*alphaL+np.sqrt(c2*alphaL**2+4*alphaD**2)
+    
+    return v_fwhm 
     
 
 ######################################################
 #Other
 ######################################################
-def pm_3sig(x,x01,s1):
-    iu=np.abs(x-x01-3.0*np.abs(s1)).argmin()
-    il=np.abs(x-x01+3.0*np.abs(s1)).argmin()
+def pm_3sig(x,x01,s1): #s1 is fwhm
+    iu=np.abs(x-x01-0.8*np.abs(s1)).argmin()
+    il=np.abs(x-x01+0.8*np.abs(s1)).argmin()
     
     if iu==il or np.abs(iu-il)<10.:
         il=0
@@ -327,7 +350,7 @@ def find_eqws(line,x,f,strong_lines):
     ip= np.abs(params[:,0]-line).argmin()
     x01,a1,s1= params[ip,:]    
     
-    eqw=a1*np.sqrt(2*np.pi)*np.abs(s1)*1000.
+    eqw=get_gew(a1,s1)
     eqw_err= eqw*(mg_errs[ip,1]/a1+mg_errs[ip,2]/np.abs(s1))
     
     #Calculate single gauss profile 
@@ -336,7 +359,6 @@ def find_eqws(line,x,f,strong_lines):
     sparams=[a1,x01,s1]    
 
     #Determine region close to gaussian line center#
-    #plus minus 3 sigma
     il, iu = pm_3sig(x,x01,s1)
     
     oc_mg=np.average(np.abs(f[il:iu]-1.0+mgaus[il:iu]))
@@ -346,7 +368,6 @@ def find_eqws(line,x,f,strong_lines):
     results=append_to_dict(results,'sg',sgaus,sparams,eqw,eqw_err,oc_sg)                                                         
 
     #Fit single Gauss and Voigt profile
-    vparams=np.zeros((len(strong_lines),4))
     eqw_gf,eqw_gf_err,gparams=fit_single_Gauss(x[il:iu],f[il:iu],a1,x01,s1)
     gausf=gaus(x,gparams[0],gparams[1],gparams[2])    
     oc_g=np.average(np.abs(f[il:iu]-1.0+gausf[il:iu]))
@@ -371,14 +392,15 @@ def print_mgauss_data(rslt):
     mg_params=rslt['mg'][1]
     print "\n",mg_params.shape[0],"lines in multi gaussian fit:"
     for gfit in  mg_params:
-        print "%4.2f %s%4.2f %s%4.3f %s%4.3f %s%4.2f" % \
+        ew=get_gew(gfit[1],gfit[2])
+        #Info about lines in multigaussian fit
+        print "%4.2f %s%4.2f %s%4.3f %s%4.2f %s%4.2f" % \
               ( gfit[0], "depth=", gfit[1], \
-               "sigma:",gfit[2],\
-               "FWHM=",gfit[2]*2.*np.sqrt(2*np.log(2)),\
-               "EW=",get_gew(gfit[1],gfit[2]))
+               "FWHM=",gfit[2],\
+               "EW=",ew,\
+               "RW=", np.log10(0.001*ew/gfit[0]))
     print "\n"
-    
-    
+     
 def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
     print_line_info(rslt)
     if rslt['mg'][3]>0.5*rslt['mg'][2]:
@@ -386,37 +408,36 @@ def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
         hu=True
     else:
         hu=False
-            
     if rslt['v'][4]<rslt['mg'][4] and rslt['v'][4]<rslt['g'][4] and np.log10(rslt['mg'][2]*0.001/line)>v_lvl:
         print "using Voigt profile"
-        eqw = rslt['v'][2]
-        eqw_err = rslt['v'][3]
+        v_fwhm=voigt_fwhm(rslt['v'][1][1],rslt['v'][1][2])
+        out= [line,rslt['v'][1][0],v_fwhm,rslt['v'][2],rslt['v'][3]]
+ 
     elif rslt['g'][4]<rslt['mg'][4] and np.log10(rslt['mg'][2]*0.001/line)<v_lvl:
         print "using single Gauss fit"
-        eqw=rslt['g'][2]
-        eqw_err=rslt['g'][3]
+        out= [ line,rslt['g'][1][1],rslt['g'][1][2],rslt['g'][2],rslt['g'][3]]
+
     elif hu==True and rslt['g'][4]<rslt['sg'][4]:
         print "using single Gauss fit"
-        eqw=rslt['g'][2]
-        eqw_err=rslt['g'][3]
+        out= [ line,rslt['g'][1][1],rslt['g'][1][2],rslt['g'][2],rslt['g'][3]]
     else:
-        eqw=rslt['mg'][2]
-        eqw_err=rslt['mg'][3]
+        out1=rslt['mg'][1][ np.abs(rslt['mg'][1][:,0]-line).argmin()]
+        out= [ line,out1[0],np.abs(out1[2]),rslt['mg'][2],rslt['mg'][3]]
         
-    if (eqw>h_eqw or eqw<l_eqw):
-        print eqw
+    if (out[3]>h_eqw or out[3]<l_eqw):
         print "Line is to strong or to weak"
-        eqw = -99.9
-        eqw_err = 99.9
+        out[2] =  -99.9
+        out[3] =  -99.9
+        out[4] =  99.9
     
-    x01=rslt['sg'][1][1]
-    if np.abs(line-x01)>det_level:
+    if np.abs(line-out[1])>det_level:
+        print line, out[1]
         print line,elem_id, "line outside the det_level range"
-        eqw = -99.9
-        eqw_err = 99.9
-            
-    eqw=round(eqw,2)
-    return eqw,eqw_err
+        out[1] = -99.9
+        out[2] = -99.9
+        out[3] = -99.9
+        out[4] =  99.9 
+    return out
 
 ######################################################
 #Ploting functions
@@ -429,9 +450,9 @@ def ontype(event):
         r_tab = find_eqws(line,x,f,sorted(list(set(strong_lines))))
         print_mgauss_data(r_tab)
 
-        eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
-        moog= "%10s%10s%10s%10s%10s%10s%10s %s \n" % \
-                (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)
+        lr = evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level) #results for line
+        moog= "%10s%10s%10s%10s%10s%10s%10.2f %s \n" % \
+                (line,elem_id,exc_p,loggf,'','',lr[3],lr[4])
         print "\n MOOG entry:"
         print moog
         
@@ -470,14 +491,12 @@ def ontype(event):
                    
         x01=r_tab['sg'][1][1]
         s1=r_tab['sg'][1][2]
-        ax1.axvspan(x01-3.0*s1,x01+3.0*s1,color='g',alpha=0.25,label="pm3s")
+        ax1.axvspan(x01-0.8*s1,x01+0.8*s1,color='g',alpha=0.25,label="pm3s")
         ax1.legend(loc=2,numpoints=1,fontsize='10',ncol=5)
         ax1.axvline(x01,color='r',lw=1.5,label="line")
         for oline in r_tab['mg'][1][:,0]:
             ax1.axvline(oline,c='r',zorder=1,label='strong lines')
         
-    
-
         ax2.plot(strong_lines,np.zeros_like(strong_lines),'o',color='r',label="strong lines")
         ax2.legend(loc=3,numpoints=1,fontsize='10',ncol=3)        
         print "Click on plot to edit line list:"
@@ -490,9 +509,9 @@ def ontype(event):
         exit()
     elif event.key=='w':
         r_tab = find_eqws(line,x,f,strong_lines)
-        eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
-        moog= "%10s%10s%10s%10s%10s%10s%10s %s \n" % \
-             (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)
+        lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
+        moog= "%10s%10s%10s%10s%10s%10s%10.2f %s \n" % \
+             (line,elem_id,exc_p,loggf,'','',lr[3],lr[4])
         print "Writing to output file..."
         print moog
         out_file.write(moog)
@@ -551,8 +570,6 @@ plot_flag = config.getboolean('Lines','plot_flag')
 
 show_lines=np.array(config.get('Lines','show_lines').split(" "),dtype=float)
 
-#if plot_flag == True or show_lines[0]!=0:
-
 
 for file_name in file_list:
     file_name=file_name.strip()
@@ -560,8 +577,11 @@ for file_name in file_list:
     print line_list_file
     list_name=line_list_file.split('.')[0]
     out_file=open("moog_"+list_name+"_"+file_name_out,'wb')
+    out_file2=open("moog2_"+list_name+"_"+file_name_out,'wb')
     out_file.write(file_name_out+"\n")
+    out_file2.write(file_name_out+"\n")
 
+    ltab = np.empty((0,5),dtype=float)    
     #Here calculations start    
     file=np.loadtxt(file_name)
 
@@ -584,6 +604,7 @@ for file_name in file_list:
 #Lets analyze every single line
     for a_line in lines:
         line,elem_id,exc_p,loggf=a_line
+        print line,elem_id
 
         d=file[np.where((file[:,0]>line-off) &(file[:,0]<line+off))]
         if d.shape[0]==0:
@@ -626,17 +647,23 @@ for file_name in file_list:
             plot_line=False
         else:
             plot_line=True
-
+        
+        
         if not plot_line:
         #do all fits: multi gauss, sgauss (part of multi gauss),
-        # gauss fitted in small area, voigt fitted in small area
+        #gauss fitted in small area, voigt fitted in small area
             r_tab = find_eqws(line,x,f,strong_lines) #results tab
+            
         #Check if EW is reasonable
-            eqw,eqw_err=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
+            lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
+
         #Write to output file
-            moog= "%10s%10s%10s%10s%10s%10s%10s %s %s \n" % \
-               (line,elem_id,exc_p,loggf,'','',eqw,eqw_err)        
+            moog= "%10s%10s%10s%10s%10s%10s%10.2f %s \n" % \
+               (line,elem_id,exc_p,loggf,'','',lr[3],lr[4])        
             out_file.write(moog)
+            
+            
+            ltab=np.append(ltab,np.array([lr]),axis=0)
             print moog+"\n"            
         
         #Ploting module - 
@@ -676,3 +703,44 @@ for file_name in file_list:
                                
             plt.show()           
             print "############################\n"
+    
+    
+    ftab=ltab[np.where(ltab[:,3]>0.)]
+    orig=copy.deepcopy(ftab)
+    a,b=np.polyfit(ftab[:,3],ftab[:,2],1)
+#    plt.plot(np.log10(ftab[:,3]/ftab[:,0]),ftab[:,2],'o')
+    plt.plot(ftab[:,0],ftab[:,3],'o')
+#    ew1=copy.deepcopy(ftab[:,3])
+    #plt.plot(ftab[:,1],ftab[:,2],'o')
+    #plt.plot(ftab[:,3],np.polyval([a,b],ftab[:,3]))
+#    plt.show()
+    
+    ftab[:,2]=np.polyval([a,b],ftab[:,3])
+    for i,row in enumerate(ftab):
+        line,x0,fwhm,ew,eew=row
+        d=file[np.where((file[:,0]>x0-off) &(file[:,0]<x0+off))]
+        lin1,dx=do_linear(d)
+        #Correct continuum around chosen line
+        lin=correct_continuum(lin1,rejt)
+        il, iu = pm_3sig(lin[:,0],x0,fwhm)
+        new_d=fit_depth_Gauss(lin[il:iu,0],lin[il:iu,1],0.0,x0,fwhm)
+        new_ew=get_gew(new_d,fwhm)
+        
+        ftab[i,3]=new_ew
+        
+        ldata=lines[np.abs(lines[:,0]-line).argmin()]
+        
+        moog= "%10s%10s%10s%10s%10s%10s%10.2f \n" % \
+              (line,ldata[1],ldata[2],ldata[3],'','',new_ew)
+        out_file2.write(moog)      
+    plt.plot(ftab[:,0],ftab[:,3],'o')
+    plt.plot(ftab[:,0],ftab[:,3]-orig[:,3],'o')
+    plt.axhline(0, color='red')
+#    plt.plot(np.log10(ftab[:,3]/ftab[:,0]),ftab[:,2],'o')              
+#    plt.plot(ew1,ftab[:,3],'o')
+#    plt.plot(ew1,ew1)
+    plt.show()    
+    
+    
+    
+    
