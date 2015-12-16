@@ -8,7 +8,7 @@ from scipy.special import erf
 from scipy.special import wofz
 import ConfigParser
 import sys
-#plt.switch_backend('tkAgg')
+#plt.switch_backend('qt4Agg')
 
 ######################################################
 #Spectrum preparation
@@ -165,6 +165,7 @@ def leastsq_errors(fit_tab,p_no): #so.leastsq result+no of parameters fitted
     else:
         sq=np.sum(fit_tab[2]['fvec']**2)/(len(fit_tab[2])-len(fit_tab[0]))        
         errs_matrix= sq*pcov
+        
     i=np.arange(len(fit_tab[0]))
     f_errs= np.reshape(errs_matrix[i,i]**2,((len(fit_tab[0])/p_no),p_no))
     
@@ -183,24 +184,30 @@ def multiple_gaus(x,params):
         mg=mg+gaus(x,a,x0,fwhm)
     return mg
 
+def d_multiple_gaus(x,ds,x0s,fwhms):
+    mg=np.zeros_like(x)
+    for i,a in enumerate(ds):
+        mg=mg+gaus(x,a,x0s[i],fwhms[i])
+    return mg
+
 def res_g(p,data):
     x,y=data
     a,x0,fwhm=p
     sg=gaus(x,a,x0,fwhm)
     err=1./np.abs(y)
+
     return (y-sg)/err
 
-def res_d(p,data):
-    x,y,x0,fwhm=data
-    a=p
-    sg=gaus(x,a,x0,fwhm)
+def res_d_mg(p,x,y,xo,fwhm):
+    mg=d_multiple_gaus(x,p,xo,fwhm)
     err=1./np.abs(y)
-    return (y-sg)/err
+    return (y-mg)/err
     
 def res_mg(p,x,y,nb):
     params=np.reshape(p,(nb,3))
     mg=multiple_gaus(x,params)
-    err=1./np.abs(y)
+    err=1./np.abs(y) 
+    
     return (y-mg)/err
     
 
@@ -210,12 +217,6 @@ def get_gew(ag,fwhmg):
     
     return gew
 
-def fit_depth_Gauss(x,f,a1,x01,fwhm1):
-    gaus_d = so.leastsq(res_d,[a1],
-             args=([x,1.0-f,x01,fwhm1]),
-             full_output=1)
-    return gaus_d[0]
-    
 def fit_single_Gauss(x,f,a1,x01,fwhm1):
     gaus_p = so.leastsq(res_g,[a1,x01,fwhm1],
              args=([x,1.0-f]),
@@ -227,7 +228,6 @@ def fit_single_Gauss(x,f,a1,x01,fwhm1):
     gf_errs=leastsq_errors(gaus_p,3)
     eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(fwhm1s))
     
-
     return eqw_gf,eqw_gf_err,gaus_p[0]
 
 def fit_multi_Gauss(x,f,strong_lines):
@@ -250,6 +250,15 @@ def fit_multi_Gauss(x,f,strong_lines):
     mg_errs=leastsq_errors(plsq,3)
     
     return params,mg_errs
+
+def fit_depth_mGauss(x,f,params):
+    depth=params[:,1]
+    xos=params[:,0]
+    fwhm=params[:,2]
+    plsq=so.leastsq(res_d_mg,depth,
+             args=(x,1.0-f,xos,fwhm),full_output=1)
+    params[:,1]=plsq[0]
+    return params
 
 ######################################################
 #Voigt fitting
@@ -343,7 +352,7 @@ def find_eqws(line,x,f,strong_lines):
 
     if params.shape[0]==0:
         print "Line ",line, "was not detected"
-        params=np.array([[9.9,9.9,9.9]])
+        params=np.array([[-9.9,-9.9,-9.9]])
 
     mgaus=multiple_gaus(x,params)
     
@@ -449,7 +458,6 @@ def ontype(event):
         
         r_tab = find_eqws(line,x,f,sorted(list(set(strong_lines))))
         print_mgauss_data(r_tab)
-
         lr = evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level) #results for line
         moog= "%10s%10s%10s%10s%10s%10s%10.2f %s \n" % \
                 (line,elem_id,exc_p,loggf,'','',lr[3],lr[4])
@@ -488,6 +496,7 @@ def ontype(event):
                    ls =    fit_style[2],
                    label = fit_style[3],
                    zorder= fit_style[4])            
+        ax1.plot(x,f-1.+r_tab['mg'][0])
                    
         x01=r_tab['sg'][1][1]
         s1=r_tab['sg'][1][2]
@@ -509,6 +518,7 @@ def ontype(event):
         exit()
     elif event.key=='w':
         r_tab = find_eqws(line,x,f,strong_lines)
+        
         lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
         moog= "%10s%10s%10s%10s%10s%10s%10.2f %s \n" % \
              (line,elem_id,exc_p,loggf,'','',lr[3],lr[4])
@@ -582,6 +592,7 @@ for file_name in file_list:
     out_file2.write(file_name_out+"\n")
 
     ltab = np.empty((0,5),dtype=float)    
+    stab = np.empty((0,5),dtype=float)    
     #Here calculations start    
     file=np.loadtxt(file_name)
 
@@ -656,6 +667,16 @@ for file_name in file_list:
             
         #Check if EW is reasonable
             lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
+            print lr
+            
+            if lr[3]>0.:
+                stab = np.append(stab,np.array([[line,lr[1],lr[3],lr[2],lr[4]]]),axis=0)
+                for slt in r_tab['mg'][1]:
+                    y= np.insert(slt,0,line)
+                    ew=get_gew(slt[1],slt[2])
+                    y = np.append(y,ew)
+                    ltab=np.append(ltab,np.array([y]),axis=0)
+            
 
         #Write to output file
             moog= "%10s%10s%10s%10s%10s%10s%10.2f %s \n" % \
@@ -663,7 +684,7 @@ for file_name in file_list:
             out_file.write(moog)
             
             
-            ltab=np.append(ltab,np.array([lr]),axis=0)
+            
             print moog+"\n"            
         
         #Ploting module - 
@@ -704,43 +725,56 @@ for file_name in file_list:
             plt.show()           
             print "############################\n"
     
+    #Second step - fit again but with xo and FWHM fixed
+    ltab=ltab[np.where(ltab[:,1]>0.)]
+    ftab=copy.deepcopy(ltab)
     
-    ftab=ltab[np.where(ltab[:,3]>0.)]
-    orig=copy.deepcopy(ftab)
-    a,b=np.polyfit(ftab[:,3],ftab[:,2],1)
-#    plt.plot(np.log10(ftab[:,3]/ftab[:,0]),ftab[:,2],'o')
-    plt.plot(ftab[:,0],ftab[:,3],'o')
-#    ew1=copy.deepcopy(ftab[:,3])
-    #plt.plot(ftab[:,1],ftab[:,2],'o')
-    #plt.plot(ftab[:,3],np.polyval([a,b],ftab[:,3]))
+    print stab
+
+    iter=True
+    while iter:
+        old= stab.shape[0]
+        a,b=np.polyfit(stab[:,1],stab[:,3],1)
+        stdev=np.std(stab[:,3]-np.polyval([a,b],stab[:,1]))
+        stab=stab[np.where(stab[:,3])]
+        stab = stab[np.where(np.abs(stab[:,3]-np.polyval([a,b],stab[:,1]))<3.*stdev)]
+        new= stab.shape[0]
+        if old==new:
+             iter=False
+
+#    plt.plot(ltab[:,1],ltab[:,3],'o',color='r') 
+#    plt.plot(ftab[:,1],ftab[:,3],'o',color='b')
+#    plt.plot(stab[:,1],stab[:,3],'o',color='g')
+#    plt.plot(ftab[:,1],np.polyval([a,b],ftab[:,1]))
 #    plt.show()
+    oldr=[]
+    new=[]
     
-    ftab[:,2]=np.polyval([a,b],ftab[:,3])
-    for i,row in enumerate(ftab):
-        line,x0,fwhm,ew,eew=row
-        d=file[np.where((file[:,0]>x0-off) &(file[:,0]<x0+off))]
+    for l in np.unique(stab[:,0]):
+    
+        ldata=lines[np.where(lines[:,0]==l)]
+        elem_id,exc_p,loggf=ldata[0][1:]
+            
+        gtab= ltab[np.where(ltab[:,0]==l)][:,1:-1] #xo,d,fwhm
+        gtab[:,2]=a*gtab[:,0]+b
+        d=file[np.where((file[:,0]>l-off) &(file[:,0]<l+off))]
         lin1,dx=do_linear(d)
         #Correct continuum around chosen line
         lin=correct_continuum(lin1,rejt)
-        il, iu = pm_3sig(lin[:,0],x0,fwhm)
-        new_d=fit_depth_Gauss(lin[il:iu,0],lin[il:iu,1],0.0,x0,fwhm)
-        new_ew=get_gew(new_d,fwhm)
+   #     il, iu = pm_3sig(lin[:,0],x0,fwhm)
         
-        ftab[i,3]=new_ew
-        
-        ldata=lines[np.abs(lines[:,0]-line).argmin()]
-        
+        new_d=fit_depth_mGauss(lin[:,0],lin[:,1],gtab)
+        ldata=new_d[np.abs(new_d[:,0]-l).argmin()]
+        new_ew=get_gew(ldata[1],ldata[2])
+        indo =np.abs(ltab[:,1]-l).argmin()
+        old=ltab[indo,:]
+        oldew=get_gew(old[2],old[3])
+        new.append(new_ew)
+        print l,oldew,new_ew
+        oldr.append(oldew)
         moog= "%10s%10s%10s%10s%10s%10s%10.2f \n" % \
-              (line,ldata[1],ldata[2],ldata[3],'','',new_ew)
-        out_file2.write(moog)      
-    plt.plot(ftab[:,0],ftab[:,3],'o')
-    plt.plot(ftab[:,0],ftab[:,3]-orig[:,3],'o')
-    plt.axhline(0, color='red')
-#    plt.plot(np.log10(ftab[:,3]/ftab[:,0]),ftab[:,2],'o')              
-#    plt.plot(ew1,ftab[:,3],'o')
-#    plt.plot(ew1,ew1)
-    plt.show()    
-    
-    
-    
-    
+              (l,elem_id,exc_p,loggf,'','',new_ew)
+        out_file2.write(moog)
+    plt.plot(oldr,new,'o')
+    plt.plot(oldr,oldr)
+    plt.show()
