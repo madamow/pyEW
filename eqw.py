@@ -195,7 +195,6 @@ def res_g(p,data):
     a,x0,fwhm=p
     sg=gaus(x,a,x0,fwhm)
     err=1./np.abs(y)
-
     return (y-sg)/err
 
 def res_d_mg(p,x,y,xo,fwhm):
@@ -207,14 +206,11 @@ def res_mg(p,x,y,nb):
     params=np.reshape(p,(nb,3))
     mg=multiple_gaus(x,params)
     err=1./np.abs(y) 
-    
     return (y-mg)/err
     
-
 def get_gew(ag,fwhmg):
     #calculate EW for gaussian profile
     gew=0.5*ag*np.sqrt(np.pi)*np.abs(fwhmg)*1000./np.sqrt(np.log(2))
-    
     return gew
 
 def fit_single_Gauss(x,f,a1,x01,fwhm1):
@@ -227,7 +223,6 @@ def fit_single_Gauss(x,f,a1,x01,fwhm1):
 
     gf_errs=leastsq_errors(gaus_p,3)
     eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(fwhm1s))
-    
     return eqw_gf,eqw_gf_err,gaus_p[0]
 
 def fit_multi_Gauss(x,f,strong_lines):
@@ -248,7 +243,6 @@ def fit_multi_Gauss(x,f,strong_lines):
         params=new_params[ind]
         
     mg_errs=leastsq_errors(plsq,3)
-    
     return params,mg_errs
 
 def fit_depth_mGauss(x,f,params):
@@ -258,7 +252,8 @@ def fit_depth_mGauss(x,f,params):
     plsq=so.leastsq(res_d_mg,depth,
              args=(x,1.0-f,xos,fwhm),full_output=1)
     params[:,1]=plsq[0]
-    return params
+    mg_errs=leastsq_errors(plsq,1)
+    return params,mg_errs
 
 ######################################################
 #Voigt fitting
@@ -281,7 +276,6 @@ def Voigt(nu, alphaD, alphaL, nu_0, A, a, b):
     y = alphaL/alphaD * f
     backg = a + b*nu 
     V = A*f/(alphaD*np.sqrt(np.pi)) * voigt(x, y) + backg
-
     return V
 
 def funcV(p, x):
@@ -319,10 +313,8 @@ def voigt_fwhm(alphaD,alphaL):
     c1 = 1.0692
     c2 = 0.86639
     v_fwhm = c1*alphaL+np.sqrt(c2*alphaL**2+4*alphaD**2)
-    
     return v_fwhm 
     
-
 ######################################################
 #Other
 ######################################################
@@ -332,8 +324,7 @@ def pm_3sig(x,x01,s1): #s1 is fwhm
     
     if iu==il or np.abs(iu-il)<10.:
         il=0
-        iu=len(x)
-            
+        iu=len(x)            
     return il,iu
 
 def append_to_dict(tab,lbl,fc,param,eqw,eqw_err,soc):
@@ -342,7 +333,6 @@ def append_to_dict(tab,lbl,fc,param,eqw,eqw_err,soc):
     tab[lbl].append(eqw)
     tab[lbl].append(eqw_err)
     tab[lbl].append(soc)
-
     return tab
 
 def find_eqws(line,x,f,strong_lines):
@@ -409,7 +399,12 @@ def print_mgauss_data(rslt):
                "EW=",ew,\
                "RW=", np.log10(0.001*ew/gfit[0]))
     print "\n"
-     
+
+def moog_entry(l,ew,eew):
+    moog= "%10s%10s%10s%10s%10s%10s%10.2f %6.3e \n" % \
+          (l[0],l[1],l[2],l[3],'','',ew,eew)
+    return moog
+    
 def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
     print_line_info(rslt)
     if rslt['mg'][3]>0.5*rslt['mg'][2]:
@@ -459,8 +454,7 @@ def ontype(event):
         r_tab = find_eqws(line,x,f,sorted(list(set(strong_lines))))
         print_mgauss_data(r_tab)
         lr = evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level) #results for line
-        moog= "%10s%10s%10s%10s%10s%10s%10.2f %s \n" % \
-                (line,elem_id,exc_p,loggf,'','',lr[3],lr[4])
+        moog= moog_entry(a_line,lr[3],lr[4])
         print "\n MOOG entry:"
         print moog
         
@@ -520,8 +514,7 @@ def ontype(event):
         r_tab = find_eqws(line,x,f,strong_lines)
         
         lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
-        moog= "%10s%10s%10s%10s%10s%10s%10.2f %s \n" % \
-             (line,elem_id,exc_p,loggf,'','',lr[3],lr[4])
+        moog= moog_entry(a_line,lr[3],lr[4])
         print "Writing to output file..."
         print moog
         out_file.write(moog)
@@ -577,7 +570,7 @@ h_eqw = config.getfloat('Lines','h_eqw')
 v_lvl = config.getfloat('Lines','v_lvl')
 det_level = config.getfloat('Lines','det_level')
 plot_flag = config.getboolean('Lines','plot_flag')
-
+fit_2step= config.getboolean('Lines','2nd_fit')
 show_lines=np.array(config.get('Lines','show_lines').split(" "),dtype=float)
 
 
@@ -587,12 +580,11 @@ for file_name in file_list:
     print line_list_file
     list_name=line_list_file.split('.')[0]
     out_file=open("moog_"+list_name+"_"+file_name_out,'wb')
-    out_file2=open("moog2_"+list_name+"_"+file_name_out,'wb')
     out_file.write(file_name_out+"\n")
-    out_file2.write(file_name_out+"\n")
-
+    
     ltab = np.empty((0,5),dtype=float)    
-    stab = np.empty((0,5),dtype=float)    
+    stab = np.empty((0,5),dtype=float)
+    m2tab = np.empty((0,6),dtype=float)    
     #Here calculations start    
     file=np.loadtxt(file_name)
 
@@ -615,7 +607,7 @@ for file_name in file_list:
 #Lets analyze every single line
     for a_line in lines:
         line,elem_id,exc_p,loggf=a_line
-        print line,elem_id
+        print line,a_line[1]
 
         d=file[np.where((file[:,0]>line-off) &(file[:,0]<line+off))]
         if d.shape[0]==0:
@@ -659,7 +651,6 @@ for file_name in file_list:
         else:
             plot_line=True
         
-        
         if not plot_line:
         #do all fits: multi gauss, sgauss (part of multi gauss),
         #gauss fitted in small area, voigt fitted in small area
@@ -667,7 +658,6 @@ for file_name in file_list:
             
         #Check if EW is reasonable
             lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
-            print lr
             
             if lr[3]>0.:
                 stab = np.append(stab,np.array([[line,lr[1],lr[3],lr[2],lr[4]]]),axis=0)
@@ -676,15 +666,10 @@ for file_name in file_list:
                     ew=get_gew(slt[1],slt[2])
                     y = np.append(y,ew)
                     ltab=np.append(ltab,np.array([y]),axis=0)
-            
 
         #Write to output file
-            moog= "%10s%10s%10s%10s%10s%10s%10.2f %s \n" % \
-               (line,elem_id,exc_p,loggf,'','',lr[3],lr[4])        
+            moog= moog_entry(a_line,lr[3],lr[4])        
             out_file.write(moog)
-            
-            
-            
             print moog+"\n"            
         
         #Ploting module - 
@@ -705,7 +690,7 @@ for file_name in file_list:
             ax1.set_xlabel("Wavelenght")
             ax1.legend(loc=2,numpoints=1,fontsize='10') 
             ax1.set_ylim(min(f)-0.1,1+0.4*(1+0.1-min(f)))
-            ax1.set_title(str(elem_id)+" "+str(line))           
+            ax1.set_title(str(a_line[1])+" "+str(line))           
            
             ax2=fig.add_subplot(2,1,2,sharex=ax1)
             ax2.plot(x,np.zeros_like(x))
@@ -725,56 +710,57 @@ for file_name in file_list:
             plt.show()           
             print "############################\n"
     
-    #Second step - fit again but with xo and FWHM fixed
-    ltab=ltab[np.where(ltab[:,1]>0.)]
-    ftab=copy.deepcopy(ltab)
+    if fit_2step==True:
+        print "Doing second multi gaussian fit..."
+        out_file2=open("moog2_"+list_name+"_"+file_name_out,'wb')
+        out_file2.write(file_name_out+"\n")
+        #Second step - fit again but with xo and FWHM fixed
+        ltab=ltab[np.where(ltab[:,1]>0.)]
     
-    print stab
+        iter=True
+        while iter:
+            old= stab.shape[0]
+            a,b=np.polyfit(stab[:,1],stab[:,3],1)
+            stdev=np.std(stab[:,3]-np.polyval([a,b],stab[:,1]))
+            stab=stab[np.where(stab[:,3])]
+            stab = stab[np.where(np.abs(stab[:,3]-np.polyval([a,b],stab[:,1]))<3.*stdev)]
+            new= stab.shape[0]
+            if old==new:
+                iter=False
 
-    iter=True
-    while iter:
-        old= stab.shape[0]
-        a,b=np.polyfit(stab[:,1],stab[:,3],1)
-        stdev=np.std(stab[:,3]-np.polyval([a,b],stab[:,1]))
-        stab=stab[np.where(stab[:,3])]
-        stab = stab[np.where(np.abs(stab[:,3]-np.polyval([a,b],stab[:,1]))<3.*stdev)]
-        new= stab.shape[0]
-        if old==new:
-             iter=False
-
-#    plt.plot(ltab[:,1],ltab[:,3],'o',color='r') 
-#    plt.plot(ftab[:,1],ftab[:,3],'o',color='b')
-#    plt.plot(stab[:,1],stab[:,3],'o',color='g')
-#    plt.plot(ftab[:,1],np.polyval([a,b],ftab[:,1]))
-#    plt.show()
-    oldr=[]
-    new=[]
+        oldr=[]
+        new=[]
     
-    for l in np.unique(stab[:,0]):
+        for l in np.unique(stab[:,0]):
     
-        ldata=lines[np.where(lines[:,0]==l)]
-        elem_id,exc_p,loggf=ldata[0][1:]
-            
-        gtab= ltab[np.where(ltab[:,0]==l)][:,1:-1] #xo,d,fwhm
-        gtab[:,2]=a*gtab[:,0]+b
-        d=file[np.where((file[:,0]>l-off) &(file[:,0]<l+off))]
-        lin1,dx=do_linear(d)
-        #Correct continuum around chosen line
-        lin=correct_continuum(lin1,rejt)
-   #     il, iu = pm_3sig(lin[:,0],x0,fwhm)
+            ld=lines[np.where(lines[:,0]==l)][0]
+            gtab= ltab[np.where(ltab[:,0]==l)][:,1:-1] #xo,d,fwhm
+            gtab[:,2]=a*gtab[:,0]+b
+            d=file[np.where((file[:,0]>l-off) &(file[:,0]<l+off))]
+            lin1,dx=do_linear(d)
+            #Correct continuum around chosen line
+            lin=correct_continuum(lin1,rejt)
         
-        new_d=fit_depth_mGauss(lin[:,0],lin[:,1],gtab)
-        ldata=new_d[np.abs(new_d[:,0]-l).argmin()]
-        new_ew=get_gew(ldata[1],ldata[2])
-        indo =np.abs(ltab[:,1]-l).argmin()
-        old=ltab[indo,:]
-        oldew=get_gew(old[2],old[3])
-        new.append(new_ew)
-        print l,oldew,new_ew
-        oldr.append(oldew)
-        moog= "%10s%10s%10s%10s%10s%10s%10.2f \n" % \
-              (l,elem_id,exc_p,loggf,'','',new_ew)
-        out_file2.write(moog)
-    plt.plot(oldr,new,'o')
-    plt.plot(oldr,oldr)
-    plt.show()
+            new_d, md_errs=fit_depth_mGauss(lin[:,0],lin[:,1],gtab)
+        
+            nind=np.abs(new_d[:,0]-l).argmin()
+            ldata=new_d[nind]
+            new_ew=get_gew(ldata[1],ldata[2])
+        
+            neqw_err= new_ew*md_errs[nind]/ldata[1]
+        
+            ld=np.append(ld,new_ew)
+            ld=np.append(ld,neqw_err)
+            m2tab=np.append(m2tab,np.array([ld]),axis=0)
+
+            indo =np.abs(ltab[:,1]-l).argmin()
+            old=ltab[indo,:]
+            oldew=get_gew(old[2],old[3])
+            new.append(new_ew)
+            oldr.append(oldew)
+    
+
+        for row in  m2tab[m2tab[:,1].argsort()]:
+            moog=moog_entry(row[0:4],row[4],row[5])
+            out_file2.write(moog)
+    print "        ...done"
