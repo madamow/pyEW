@@ -655,7 +655,7 @@ for file_name in file_list:
         #do all fits: multi gauss, sgauss (part of multi gauss),
         #gauss fitted in small area, voigt fitted in small area
             r_tab = find_eqws(line,x,f,strong_lines) #results tab
-            
+            print_mgauss_data(r_tab)
         #Check if EW is reasonable
             lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
             
@@ -759,7 +759,13 @@ for file_name in file_list:
             new.append(new_ew)
             oldr.append(oldew)
     
-
+#        plt.plot(oldr,new,'o')
+#        plt.plot(oldr,oldr)
+#        plt.xlabel("1st step")
+#        plt.ylabel("2nd step")
+#        plt.title(file_name_out)
+#        plt.show()
+        
         for row in  m2tab[m2tab[:,1].argsort()]:
             moog=moog_entry(row[0:4],row[4],row[5])
             out_file2.write(moog)
