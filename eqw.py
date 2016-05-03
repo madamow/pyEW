@@ -1,3 +1,4 @@
+#!/home/puccini/adamow/yt-x86_64/bin/python
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib, copy
@@ -174,8 +175,10 @@ def leastsq_errors(fit_tab,p_no): #so.leastsq result+no of parameters fitted
 ######################################################
 #Gaussian fitting
 ######################################################
+AGAUSS = -4.0 * np.log(2.0)
+
 def gaus(x,a,x0,fwhm):
-    return a*np.exp(-4*np.log(2)*(x-x0)**2/(fwhm**2))
+    return a * np.exp(AGAUSS * ((x - x0) / fwhm)**2)
 
 def multiple_gaus(x,params):
     mg=np.zeros_like(x)
@@ -234,7 +237,7 @@ def fit_multi_Gauss(x,f,strong_lines):
 
     #First run
     while params.shape[0]!=new_params.shape[0] and params.shape[0]>0.:
-        plsq=so.leastsq(res_mg,params,
+        plsq=so.leastsq(res_mg, params,
              args=(x,1.0-f,params.shape[0]),full_output=1)
         new_params= np.reshape(plsq[0],(params.shape[0],3))
         #evaluate  run
@@ -319,8 +322,9 @@ def voigt_fwhm(alphaD,alphaL):
 #Other
 ######################################################
 def pm_3sig(x,x01,s1): #s1 is fwhm
-    iu=np.abs(x-x01-0.8*np.abs(s1)).argmin()
-    il=np.abs(x-x01+0.8*np.abs(s1)).argmin()
+    iu=np.abs(x-x01-1.*np.abs(s1)).argmin()
+    il=np.abs(x-x01+1.*np.abs(s1)).argmin()
+    print 3.*np.abs(s1)
     
     if iu==il or np.abs(iu-il)<10.:
         il=0
@@ -379,68 +383,77 @@ def find_eqws(line,x,f,strong_lines):
 
     return results
 
+#####
+#Print to file and on screen  functions
+def moog_entry(l,ew,eew):
+    moog= "%10s%10s%10s%10s%10s%10s%10.2f %6.3e \n" % \
+          (l[0],l[1],l[2],l[3],'','',ew,eew)
+    return moog
+
+def print_and_log(list_of_inps):
+    s = ' '.join(map(str, list_of_inps))
+    print s   
+    logfile.write(s+"\n")
+            
 def print_line_info(rslt):
     fit_labels={'mg':'multi Gauss','sg':'part of mGauss','g':'Gauss','v':'Voigt'}
     for fit in rslt:
-        print "%15s %s %4.2f %s %f %s %f" % \
+        finfo= "%15s %s %4.2f %s %f %s %f" % \
         (fit_labels[fit],": EW =" ,rslt[fit][2],"eEW =",rslt[fit][3],"o-c:",rslt[fit][4])
+        print_and_log([finfo])
 
 def print_mgauss_data(rslt):
     #print full data for all lines 
     #fitted with multi Gauss function
     mg_params=rslt['mg'][1]
-    print "\n",mg_params.shape[0],"lines in multi gaussian fit:"
+    print_and_log(["\n",mg_params.shape[0],"lines in multi gaussian fit:"])
     for gfit in  mg_params:
         ew=get_gew(gfit[1],gfit[2])
         #Info about lines in multigaussian fit
-        print "%4.2f %s%4.2f %s%4.3f %s%4.2f %s%4.2f" % \
+        info= "%4.2f %s%4.2f %s%4.3f %s%4.2f %s%4.2f" % \
               ( gfit[0], "depth=", gfit[1], \
                "FWHM=",gfit[2],\
                "EW=",ew,\
                "RW=", np.log10(0.001*ew/gfit[0]))
-    print "\n"
-
-def moog_entry(l,ew,eew):
-    moog= "%10s%10s%10s%10s%10s%10s%10.2f %6.3e \n" % \
-          (l[0],l[1],l[2],l[3],'','',ew,eew)
-    return moog
+        print_and_log([info])
     
 def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
     print_line_info(rslt)
     if rslt['mg'][3]>0.5*rslt['mg'][2]:
-        print "Huge error!", rslt['mg'][2],rslt['mg'][3]
+        print_and_log(["Huge error!", rslt['mg'][2],rslt['mg'][3]])
         hu=True
     else:
         hu=False
     if rslt['v'][4]<rslt['mg'][4] and rslt['v'][4]<rslt['g'][4] and np.log10(rslt['mg'][2]*0.001/line)>v_lvl:
-        print "using Voigt profile"
-        v_fwhm=voigt_fwhm(rslt['v'][1][1],rslt['v'][1][2])
-        out= [line,rslt['v'][1][0],v_fwhm,rslt['v'][2],rslt['v'][3]]
+        print_and_log([ "using Voigt profile"])
+        v_fwhm = voigt_fwhm(rslt['v'][1][1],rslt['v'][1][2])
+        out = [line,rslt['v'][1][2],v_fwhm,rslt['v'][2],rslt['v'][3]]
  
     elif rslt['g'][4]<rslt['mg'][4] and np.log10(rslt['mg'][2]*0.001/line)<v_lvl:
-        print "using single Gauss fit"
-        out= [ line,rslt['g'][1][1],rslt['g'][1][2],rslt['g'][2],rslt['g'][3]]
+        print_and_log([ "using single Gauss fit"])
+        out = [line,rslt['g'][1][1],rslt['g'][1][2],rslt['g'][2],rslt['g'][3]]
 
     elif hu==True and rslt['g'][4]<rslt['sg'][4]:
         print "using single Gauss fit"
-        out= [ line,rslt['g'][1][1],rslt['g'][1][2],rslt['g'][2],rslt['g'][3]]
+        logfile.write("using single Gauss fit\n")
+        out = [ line,rslt['g'][1][1],rslt['g'][1][2],rslt['g'][2],rslt['g'][3]]
     else:
         out1=rslt['mg'][1][ np.abs(rslt['mg'][1][:,0]-line).argmin()]
         out= [ line,out1[0],np.abs(out1[2]),rslt['mg'][2],rslt['mg'][3]]
         
     if (out[3]>h_eqw or out[3]<l_eqw):
-        print "Line is to strong or to weak"
+        print_and_log([ "Line is too strong or too weak"])
+        print out[1]
         out[2] =  -99.9
         out[3] =  -99.9
         out[4] =  99.9
-    
+
     if np.abs(line-out[1])>det_level:
-        print line, out[1]
-        print line,elem_id, "line outside the det_level range"
-        out[1] = -99.9
+        print_and_log([ line,elem_id, "line outside the det_level range"])
         out[2] = -99.9
         out[3] = -99.9
         out[4] =  99.9 
+
     return out
 
 ######################################################
@@ -494,7 +507,7 @@ def ontype(event):
                    
         x01=r_tab['sg'][1][1]
         s1=r_tab['sg'][1][2]
-        ax1.axvspan(x01-0.8*s1,x01+0.8*s1,color='g',alpha=0.25,label="pm3s")
+        ax1.axvspan(x01-1.*s1,x01+1.*s1,color='g',alpha=0.25,label="pm3s")
         ax1.legend(loc=2,numpoints=1,fontsize='10',ncol=5)
         ax1.axvline(x01,color='r',lw=1.5,label="line")
         for oline in r_tab['mg'][1][:,0]:
@@ -516,8 +529,7 @@ def ontype(event):
         lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
         moog= moog_entry(a_line,lr[3],lr[4])
         print "Writing to output file..."
-        print moog
-        out_file.write(moog)
+        print_and_log([moog])
         print "Close the plot window to move on"
         
     else:
@@ -555,7 +567,7 @@ config.read(cfg_file)
 
 file_list = open(config.get('Input files','files_list')).readlines()
 line_list_file = config.get('Input files','line_list_file')
-lines=np.loadtxt(line_list_file) #Format: line element extitation_potential loggf, 
+lines=np.loadtxt(line_list_file,usecols=[0,1,2,3]) #Format: line element extitation_potential loggf, 
                                  #all in MOOG like format, especially element
 
 off = config.getfloat('Spectrum','off')
@@ -570,21 +582,26 @@ h_eqw = config.getfloat('Lines','h_eqw')
 v_lvl = config.getfloat('Lines','v_lvl')
 det_level = config.getfloat('Lines','det_level')
 plot_flag = config.getboolean('Lines','plot_flag')
-fit_2step= config.getboolean('Lines','2nd_fit')
 show_lines=np.array(config.get('Lines','show_lines').split(" "),dtype=float)
 
 
 for file_name in file_list:
+    print file_name
     file_name=file_name.strip()
-    file_name_out=file_name.split("/")[-1]
-    print line_list_file
+    file_name_out=file_name.split("/")[-1].split(".")[0]
+    log_name = file_name_out.split(".")[0]+"_EW.log"
+    logfile = open(log_name,'w')
+    
+    print "Line list:",line_list_file
+    logfile.write( "Line list: "+line_list_file+"\n")
     list_name=line_list_file.split('.')[0]
-    out_file=open("moog_"+list_name+"_"+file_name_out,'wb')
+    out_file=open("moog_"+list_name+"_"+file_name_out.split(".")[0]+".out",'wb')
     out_file.write(file_name_out+"\n")
     
-    ltab = np.empty((0,5),dtype=float)    
+    mgtab = np.empty((0,5),dtype=float)    
     stab = np.empty((0,5),dtype=float)
     m2tab = np.empty((0,6),dtype=float)    
+    
     #Here calculations start    
     file=np.loadtxt(file_name)
 
@@ -592,26 +609,28 @@ for file_name in file_list:
     #Deal with rejt parameter    
     if rejt_auto == True:
         rejt,SN = auto_rejt(file,config)
+        print_and_log(["rejt parameter was found automatically"])
     else:
-       print "I will use rejt defined by user"
+       print_and_log(["rejt parameter defined by user"])
        SN = 1.0/(1.0-rejt)
-    print "signal to noise:", SN
-    print "rejt parameter:", rejt
+    print_and_log(["rejt parameter:", rejt])
+    print_and_log(["signal to noise:", SN])
+    
 #####################################################
     #Check where spectrum starts and ends
     #Check if your line list fits to this range
     #If not, crop the linelist
-    lines = lines[np.where(( lines[:,0]<file[:,0].max()-off) & (lines[:,0]>file[:,0].min()+off))]
+    lines_in_spec = lines[np.where(( lines[:,0]<file[:,0].max()-off) & (lines[:,0]>file[:,0].min()+off))]
 
 #####################################################
 #Lets analyze every single line
-    for a_line in lines:
+    for a_line in lines_in_spec:
         line,elem_id,exc_p,loggf=a_line
-        print line,a_line[1]
+        print_and_log(["\n#####\n",line,elem_id])
 
         d=file[np.where((file[:,0]>line-off) &(file[:,0]<line+off))]
-        if d.shape[0]==0:
-            print "Nothing to do in this range, probably gap in your spectra"
+        if d.shape[0]==0 or d[:,0].max()<line or d[:,0].min()>line:
+            print_and_log([ "Nothing to do in this range, probably gap in your spectra"])
             continue
         
         #Make spectrum linear
@@ -619,7 +638,11 @@ for file_name in file_list:
         lin1,dx=do_linear(d)
         
         #Correct continuum around chosen line
-        lin=correct_continuum(lin1,rejt)
+        try:
+             lin=correct_continuum(lin1,rejt)
+        except:
+             print_and_log(["Unable to correct continuum"])
+             continue
 
         x=lin[:,0]
         f=lin[:,1]
@@ -642,7 +665,7 @@ for file_name in file_list:
         if len(strong_lines)==0:
             continue
                 
-        print "I see", len(strong_lines),"line(s) in this range"
+        print_and_log([ "I see", len(strong_lines),"line(s) in this range"])
 ########################################################################        
         if line in show_lines and plot_flag==False:
             plot_line=True
@@ -665,13 +688,13 @@ for file_name in file_list:
                     y= np.insert(slt,0,line)
                     ew=get_gew(slt[1],slt[2])
                     y = np.append(y,ew)
-                    ltab=np.append(ltab,np.array([y]),axis=0)
+                    mgtab=np.append(mgtab,np.array([y]),axis=0)
 
         #Write to output file
             moog= moog_entry(a_line,lr[3],lr[4])        
             out_file.write(moog)
-            print moog+"\n"            
-        
+            print moog+"\n"    
+            logfile.write(moog)        
         #Ploting module - 
         else:
             fig = plt.figure()
@@ -709,64 +732,24 @@ for file_name in file_list:
                                
             plt.show()           
             print "############################\n"
-    
-    if fit_2step==True:
-        print "Doing second multi gaussian fit..."
-        out_file2=open("moog2_"+list_name+"_"+file_name_out,'wb')
-        out_file2.write(file_name_out+"\n")
+    if not plot_line:
+        print "Evaluation of FWHMs..."
+        out_file1=open("moog1_"+list_name+"_"+file_name_out,'wb')
+        out_file1.write(file_name_out+"\n")
         #Second step - fit again but with xo and FWHM fixed
-        ltab=ltab[np.where(ltab[:,1]>0.)]
-    
         iter=True
         while iter:
             old= stab.shape[0]
             a,b=np.polyfit(stab[:,1],stab[:,3],1)
-            stdev=np.std(stab[:,3]-np.polyval([a,b],stab[:,1]))
+            stdev=np.std(stab[:,3]-np.polyval([a,b],stab[:,1]),ddof=1)
             stab=stab[np.where(stab[:,3])]
             stab = stab[np.where(np.abs(stab[:,3]-np.polyval([a,b],stab[:,1]))<3.*stdev)]
             new= stab.shape[0]
             if old==new:
                 iter=False
-
-        oldr=[]
-        new=[]
-    
-        for l in np.unique(stab[:,0]):
-    
-            ld=lines[np.where(lines[:,0]==l)][0]
-            gtab= ltab[np.where(ltab[:,0]==l)][:,1:-1] #xo,d,fwhm
-            gtab[:,2]=a*gtab[:,0]+b
-            d=file[np.where((file[:,0]>l-off) &(file[:,0]<l+off))]
-            lin1,dx=do_linear(d)
-            #Correct continuum around chosen line
-            lin=correct_continuum(lin1,rejt)
         
-            new_d, md_errs=fit_depth_mGauss(lin[:,0],lin[:,1],gtab)
-        
-            nind=np.abs(new_d[:,0]-l).argmin()
-            ldata=new_d[nind]
-            new_ew=get_gew(ldata[1],ldata[2])
-        
-            neqw_err= new_ew*md_errs[nind]/ldata[1]
-        
-            ld=np.append(ld,new_ew)
-            ld=np.append(ld,neqw_err)
-            m2tab=np.append(m2tab,np.array([ld]),axis=0)
-
-            indo =np.abs(ltab[:,1]-l).argmin()
-            old=ltab[indo,:]
-            oldew=get_gew(old[2],old[3])
-            new.append(new_ew)
-            oldr.append(oldew)
-    
-#        plt.plot(oldr,new,'o')
-#        plt.plot(oldr,oldr)
-#        plt.xlabel("1st step")
-#        plt.ylabel("2nd step")
-#        plt.title(file_name_out)
-#        plt.show()
-        
-        for row in  m2tab[m2tab[:,1].argsort()]:
-            moog=moog_entry(row[0:4],row[4],row[5])
-            out_file2.write(moog)
-    print "        ...done"
+        for l in stab:
+            ld=lines[np.where(lines[:,0]==l[0])][0]
+            m1=moog_entry(ld, l[2],l[4])
+            out_file1.write(m1)
+                
