@@ -424,6 +424,7 @@ def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
         hu=True
     else:
         hu=False
+    
     if rslt['v'][4]<rslt['mg'][4] and rslt['v'][4]<rslt['g'][4] and np.log10(rslt['mg'][2]*0.001/line)>v_lvl:
         print_and_log([ "using Voigt profile"])
         v_fwhm = voigt_fwhm(rslt['v'][1][1],rslt['v'][1][2])
@@ -434,8 +435,7 @@ def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
         out = [line,rslt['g'][1][1],rslt['g'][1][2],rslt['g'][2],rslt['g'][3]]
 
     elif hu==True and rslt['g'][4]<rslt['sg'][4]:
-        print "using single Gauss fit"
-        logfile.write("using single Gauss fit\n")
+        print_and_log([ "using single Gauss fit"])
         out = [ line,rslt['g'][1][1],rslt['g'][1][2],rslt['g'][2],rslt['g'][3]]
     else:
         out1=rslt['mg'][1][ np.abs(rslt['mg'][1][:,0]-line).argmin()]
@@ -443,7 +443,6 @@ def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
         
     if (out[3]>h_eqw or out[3]<l_eqw):
         print_and_log([ "Line is too strong or too weak"])
-        print out[1]
         out[2] =  -99.9
         out[3] =  -99.9
         out[4] =  99.9
@@ -453,7 +452,7 @@ def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
         out[2] = -99.9
         out[3] = -99.9
         out[4] =  99.9 
-
+        
     return out
 
 ######################################################
