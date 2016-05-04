@@ -63,15 +63,15 @@ def read_cont_sec(config):
 def auto_rejt(tab,config):
     rejt_reg=np.array(read_cont_sec(config),dtype=float)
     rejt_tab=[]
-    SN_tab=[]
+    
     for item in rejt_reg:
         r_low,r_up=item
         reg,rres=do_linear(file[np.where((tab[:,0]>r_low) &(tab[:,0]<r_up))])
         reg_smo= ndimage.gaussian_filter1d(reg[:,1],sigma=s_factor,mode='wrap')
         rejt_tab.append(np.std(reg[:,1]-reg_smo))
-        SN_tab.append(np.average(reg[:,1])/np.std(reg[:,1]-reg_smo))
-    rejt=1.-np.median(rejt_tab)
-    SN=np.median(SN_tab)
+    
+    rejt=1. - np.median(rejt_tab)
+    SN=1. / (1.-rejt)    
     
     return rejt, SN
 
