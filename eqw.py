@@ -9,8 +9,66 @@ from scipy.special import erf
 from scipy.special import wofz
 import ConfigParser
 import sys
-#plt.switch_backend('qt4Agg')
+plt.switch_backend('qt4Agg')
 
+#####################################################
+#Print on screen and write to files functions
+#####################################################
+def print_and_log(logfile,list_of_inps):
+    s = ' '.join(map(str, list_of_inps))
+    print s
+    logfile.write(s+"\n")
+
+def moog_entry(l,ew,eew):
+    moog= "%10s%10s%10s%10s%10s%10s%10.2f %6.3e \n" % \
+          (l[0],l[1],l[2],l[3],'','',ew,eew)
+    return moog
+            
+def print_line_info(rslt):
+    fit_labels={'mg':'multi Gauss',
+                'sg':'part of mGauss','g':'Gauss','v':'Voigt'}
+    for fit in rslt:
+        finfo= "%15s %s %4.2f %s %f %s %f" % \
+        (fit_labels[fit],": EW =" ,rslt[fit][2],"eEW =",rslt[fit][3],"o-c:",rslt[fit][4])
+        print_and_log(logfile,[finfo])
+
+def print_mgauss_data(rslt):
+    #print full data for all lines 
+    #fitted with multi Gauss function
+    mg_params=rslt['mg'][1]
+    print_and_log(logfile,["\n",mg_params.shape[0],
+                           "lines in multi gaussian fit:"])
+    for gfit in  mg_params:
+        ew=get_gew(gfit[1],gfit[2])
+        #Info about lines in multigaussian fit
+        info= "%4.2f %s%4.2f %s%4.3f %s%4.2f %s%4.2f" % \
+              ( gfit[0], "depth=", gfit[1], \
+               "FWHM=",gfit[2],\
+               "EW=",ew,\
+               "RW=", np.log10(0.001*ew/gfit[0]))
+        print_and_log(logfile,[info])
+
+def moog_output(out_file,a_line,lr):       
+    #Write to output file
+    moog= moog_entry(a_line,lr[3],lr[4])        
+    out_file.write(moog)
+    print_and_log(logfile,["\nMoog entry:\n",moog])
+
+####################################################
+#Create output files
+####################################################
+def create_out_files(infile_name,list_name):
+    print file_name
+    file_name_out=file_name.split("/")[-1].split(".")[0]
+    
+    logfile = open(file_name_out.split(".")[0]+"_EW.log",'w')
+    print_and_log(logfile,["Line list:",line_list_file])
+    
+    list_name=line_list_file.split('.')[0]
+    out_file=open("moog_"+list_name+"_"+file_name_out.split(".")[0]+".out",'wb')
+    out_file.write(file_name_out+"\n")
+    
+    return logfile,out_file
 ######################################################
 #Spectrum preparation
 ######################################################
@@ -29,24 +87,24 @@ def correct_continuum(spec,rejt):
     stop=False
     tab=np.copy(spec)
     p_no=0
+    iter=0.0
     while stop==False:
+        iter = iter+1.
         p_no_prev=p_no
         ft=np.polyfit(tab[:,0],tab[:,1],2)
         tab= spec[np.where(spec[:,1]>rejt*np.polyval(ft,spec[:,0]))]
-        
         p_no=tab.shape[0]
     
-        if (p_no==p_no_prev):
+        if (p_no==p_no_prev or iter>100.):
             stop=True
-    if p_no!=0:
+    if p_no!=0 and iter<100.:
         cont=spec[:,1]/np.polyval(ft,spec[:,0])
         spec[:,1]=cont
     else:
         print "Fail when correcting continuum"
-        print "Let's stick to what we already have"
         #This is for cases where line is located 
         #i.e. in a break of echelle spectrum    
-    return spec
+    return spec,iter,p_no
 
 def smooth(y, box_pts):
     #smooths function, recipe from StackOverflow
@@ -72,6 +130,9 @@ def auto_rejt(tab,config):
     
     rejt=1. - np.median(rejt_tab)
     SN=1. / (1.-rejt)    
+
+    print_and_log(logfile,["signal to noise:", SN])
+    print_and_log(logfile,[ "rejt parameter:", rejt])
     
     return rejt, SN
 
@@ -122,17 +183,17 @@ def find_strong_lines(x,tab,xo,r_lvl,SN):
     max_tab=np.array([x[max_ind],tab[max_ind]])
     min_tab=np.array([x[min_ind],tab[min_ind]])
     
-    noise=np.std(tab)*r_lvl
+    thold=np.std(tab)*r_lvl
     str_lines=[]
-    if not (max_tab.size!=0 and min_tab.size!=0 and noise==0.0):
+    if not (max_tab.size!=0 and min_tab.size!=0 and thold==0.0):
         for item in  xo:
             indx= np.abs(max_tab[0,:]-item).argmin()
             indm= np.abs(min_tab[0,:]-item).argmin()
         
-            if ((np.abs(max_tab[1,indx])>noise) and (np.abs(min_tab[1,indm])>noise)):
+            if ((np.abs(max_tab[1,indx])>thold) and (np.abs(min_tab[1,indm])>thold)):
                 str_lines.append(item)
             
-    return str_lines,noise
+    return str_lines,thold
 
 def evaluate_lines(line,strong_lines,det_level,gggf_infm):
     #check if our line was identified
@@ -324,7 +385,6 @@ def voigt_fwhm(alphaD,alphaL):
 def pm_3sig(x,x01,s1): #s1 is fwhm
     iu=np.abs(x-x01-1.*np.abs(s1)).argmin()
     il=np.abs(x-x01+1.*np.abs(s1)).argmin()
-    print 3.*np.abs(s1)
     
     if iu==il or np.abs(iu-il)<10.:
         il=0
@@ -382,179 +442,199 @@ def find_eqws(line,x,f,strong_lines):
     results=append_to_dict(results,'v',svoigt,vpar,I,v_errs,oc_v)       
 
     return results
-
-#####
-#Print to file and on screen  functions
-def moog_entry(l,ew,eew):
-    moog= "%10s%10s%10s%10s%10s%10s%10.2f %6.3e \n" % \
-          (l[0],l[1],l[2],l[3],'','',ew,eew)
-    return moog
-
-def print_and_log(list_of_inps):
-    s = ' '.join(map(str, list_of_inps))
-    print s   
-    logfile.write(s+"\n")
-            
-def print_line_info(rslt):
-    fit_labels={'mg':'multi Gauss','sg':'part of mGauss','g':'Gauss','v':'Voigt'}
-    for fit in rslt:
-        finfo= "%15s %s %4.2f %s %f %s %f" % \
-        (fit_labels[fit],": EW =" ,rslt[fit][2],"eEW =",rslt[fit][3],"o-c:",rslt[fit][4])
-        print_and_log([finfo])
-
-def print_mgauss_data(rslt):
-    #print full data for all lines 
-    #fitted with multi Gauss function
-    mg_params=rslt['mg'][1]
-    print_and_log(["\n",mg_params.shape[0],"lines in multi gaussian fit:"])
-    for gfit in  mg_params:
-        ew=get_gew(gfit[1],gfit[2])
-        #Info about lines in multigaussian fit
-        info= "%4.2f %s%4.2f %s%4.3f %s%4.2f %s%4.2f" % \
-              ( gfit[0], "depth=", gfit[1], \
-               "FWHM=",gfit[2],\
-               "EW=",ew,\
-               "RW=", np.log10(0.001*ew/gfit[0]))
-        print_and_log([info])
     
 def evaluate_results(line,rslt,v_lvl,l_eqw,h_eqw,det_level):
     print_line_info(rslt)
     if rslt['mg'][3]>0.5*rslt['mg'][2]:
-        print_and_log(["Huge error!", rslt['mg'][2],rslt['mg'][3]])
+        print_and_log(logfile,["Huge error!", rslt['mg'][2],rslt['mg'][3]])
         hu=True
     else:
         hu=False
     
     if rslt['v'][4]<rslt['mg'][4] and rslt['v'][4]<rslt['g'][4] and np.log10(rslt['mg'][2]*0.001/line)>v_lvl:
-        print_and_log([ "using Voigt profile"])
+        print_and_log(logfile,[ "using Voigt profile"])
         v_fwhm = voigt_fwhm(rslt['v'][1][1],rslt['v'][1][2])
         out = [line,rslt['v'][1][2],v_fwhm,rslt['v'][2],rslt['v'][3]]
  
     elif rslt['g'][4]<rslt['mg'][4] and np.log10(rslt['mg'][2]*0.001/line)<v_lvl:
-        print_and_log([ "using single Gauss fit"])
+        print_and_log(logfile,[ "using single Gauss fit"])
         out = [line,rslt['g'][1][1],rslt['g'][1][2],rslt['g'][2],rslt['g'][3]]
 
     elif hu==True and rslt['g'][4]<rslt['sg'][4]:
-        print_and_log([ "using single Gauss fit"])
+        print_and_log(logfile,[ "using single Gauss fit"])
         out = [ line,rslt['g'][1][1],rslt['g'][1][2],rslt['g'][2],rslt['g'][3]]
     else:
         out1=rslt['mg'][1][ np.abs(rslt['mg'][1][:,0]-line).argmin()]
         out= [ line,out1[0],np.abs(out1[2]),rslt['mg'][2],rslt['mg'][3]]
         
     if (out[3]>h_eqw or out[3]<l_eqw):
-        print_and_log([ "Line is too strong or too weak"])
+        print_and_log(logfile,[ "Line is too strong or too weak"])
         out[2] =  -99.9
         out[3] =  -99.9
         out[4] =  99.9
 
     if np.abs(line-out[1])>det_level:
-        print_and_log([ line,elem_id, "line outside the det_level range"])
+        print_and_log(logfile,[ line,elem_id, "line outside the det_level range"])
         out[2] = -99.9
         out[3] = -99.9
         out[4] =  99.9 
         
     return out
 
+
+
+#EW analysis
+def EW_analysis(line,x,f,strong_lines,v_lvl,l_eqw,h_eqw,det_level):
+    #do all fits: multi gauss, sgauss (part of multi gauss),
+    #gauss fitted in small area, voigt fitted in small area
+    r_tab = find_eqws(line,x,f,strong_lines) #results tab
+    print_mgauss_data(r_tab)
+    #Check if EW is reasonable
+    lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
+    
+    return r_tab,lr
+    
 ######################################################
-#Ploting functions
+#Ploting module
 ######################################################        
-        
-def ontype(event):
-    if event.key=='enter':
-        print "\n", len(list(set(strong_lines))),"lines to fit"
-        
-        r_tab = find_eqws(line,x,f,sorted(list(set(strong_lines))))
-        print_mgauss_data(r_tab)
-        lr = evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level) #results for line
-        moog= moog_entry(a_line,lr[3],lr[4])
-        print "\n MOOG entry:"
-        print moog
-        
-        fsl= r_tab['mg'][1][:,0] #fitted strong lines
-        
-        ndl_ind=[] #not detected lines index
-        for sline in strong_lines:
-           if not any(np.abs(sline-fsl)<det_level):
-               print "Line at", round(sline,2), "was not included in mGauss\n"
-               ndl_ind.append(sline)
+class Plot_Module(object):        
 
-        for item in ndl_ind:
-            strong_lines.remove(item)
-
-        #Remove old fits before ploting new ones
-        plt.sca(ax1)
-        for artist in plt.gca().get_children():
-            if hasattr(artist,'get_label') and (artist.get_label() in lstyle[:,3] or 
-                artist.get_label()=="line" or artist.get_label()=='pm3s' or
-                artist.get_label()=='strong lines' or  artist.get_label()=='line_pnt'):
-                artist.remove()        
-        plt.sca(ax2) 
-        for artist in plt.gca().get_children():
-            if hasattr(artist,'get_label') and (artist.get_label()=='strong lines' 
-                or  artist.get_label()=='line_pnt'):
-                artist.remove()                
+    def __init__(self,ax,line,x,f,strong_lines,v_lvl,l_eqw,h_eqw,
+                 det_level,thold):
+        self.ax = ax
+        self.strong_lines = strong_lines
         
-        #Plot new fits
-        for lbl in r_tab:
-            fit_style=np.squeeze(lstyle[np.where(lstyle[:,0]==lbl)])
-            ax1.plot(x,1.0-r_tab[lbl][0],
+        x_formatter = matplotlib.ticker.ScalarFormatter(useOffset=False)
+        self.ax[0].xaxis.set_major_formatter(x_formatter)
+        self.ax[0].axhline(1.0,color='g',label='continuum')
+        self.ax[0].set_xlabel("Wavelenght")
+        self.ax[0].plot(x,f,'o',color= 'k' , label='spectrum')
+        self.ax[0].set_ylim(min(f)-0.1,1.+0.4*(1.+0.1-min(f)))
+    
+        self.ax[1].axhline(0)
+        self.ax[1].plot(x,gggf,'b', label='3rd derivative')
+        self.ax[1].set_ylim(np.min(gggf),np.max(gggf))
+        self.ax[1].set_xlim(line-off,line+off)
+        self.ax[1].plot(gggf_infm, np.zeros_like(gggf_infm),'o',color='b',
+                     label='flex points + -> -')
+        self.ax[1].axhline(-thold,c='r')
+        self.ax[1].axhline( thold,c='r')
+
+        self.lstyle=np.array([['mg','c','-','multi Gauss',4],
+                              ['sg','b',':','line in mGauss',3],
+                              [ 'g', 'y','-','Gauss',2],
+                              [ 'v', 'm','-','Voigt',1]])
+
+          
+    def make_plot(self):   
+        for lbl in self.r_tab:
+            fit_style=np.squeeze(self.lstyle[np.where(self.lstyle[:,0]==lbl)])
+            ax[0].plot(x,1.0-self.r_tab[lbl][0],
                    color = fit_style[1],
                    ls =    fit_style[2],
                    label = fit_style[3],
                    zorder= fit_style[4])            
-        ax1.plot(x,f-1.+r_tab['mg'][0])
-                   
-        x01=r_tab['sg'][1][1]
-        s1=r_tab['sg'][1][2]
-        ax1.axvspan(x01-1.*s1,x01+1.*s1,color='g',alpha=0.25,label="pm3s")
-        ax1.legend(loc=2,numpoints=1,fontsize='10',ncol=5)
-        ax1.axvline(x01,color='r',lw=1.5,label="line")
-        for oline in r_tab['mg'][1][:,0]:
-            ax1.axvline(oline,c='r',zorder=1,label='strong lines')
         
-        ax2.plot(strong_lines,np.zeros_like(strong_lines),'o',color='r',label="strong lines")
-        ax2.legend(loc=3,numpoints=1,fontsize='10',ncol=3)        
+        x01 = self.r_tab['sg'][1][1]
+        s1  = self.r_tab['sg'][1][2]
+        self.ax[0].axvspan(x01-0.8*s1,x01+0.8*s1,color='g',
+                           alpha=0.25,label="pm3s")   
+        self.ax[0].legend(loc=2,numpoints=1,fontsize='10',ncol=4)
+        
+        
+        self.ax[0].axvline(x01,color='r',lw=1.5,label="line")
+        for oline in self.r_tab['mg'][1][:,0]:
+            ax[0].axvline(oline,c='r',zorder=1,label='strong lines')
+            
+        self.ax[1].plot(self.strong_lines,np.zeros_like(self.strong_lines),
+                   'o',color='r',label="strong lines")
+        self.ax[1].legend(loc=3,numpoints=1,fontsize='10',ncol=3)
+         
+    def clean_plot(self):
+        plt.sca(self.ax[0])
+        for artist in plt.gca().get_children():
+            if hasattr(artist,'get_label') and (
+                 artist.get_label() in self.lstyle[:,3] or  
+                 artist.get_label()=="line" or  
+                 artist.get_label()=='pm3s' or 
+                 artist.get_label()=='strong lines' or 
+                 artist.get_label()=='line_pnt'):
+                artist.remove()        
+                
+        plt.sca(self.ax[1]) 
+        for artist in plt.gca().get_children():
+            if hasattr(artist,'get_label') and (
+                       artist.get_label()=='strong lines' or 
+                       artist.get_label()=='line_pnt'):
+                artist.remove()
+    
+    def onclick(self,event):
+        toolbar = plt.get_current_fig_manager().toolbar
+        if event.button==1 and toolbar.mode=='':
+            ind= np.abs((gggf_infm-event.xdata)).argmin()
+            self.ax[1].plot(gggf_infm[ind],1.0,'o',color='r',mec='b',picker=5,
+            label='line_pnt')
+            self.ax[0].axvline(gggf_infm[ind],c='r',ls=":",zorder=1,
+                               label='line_pnt')
+            self.strong_lines.append(gggf_infm[ind])
+            
+        elif event.button==3 and toolbar.mode=='':
+            ind = np.squeeze(np.where(
+                  np.abs(self.strong_lines-event.xdata)<0.05))
+            
+            if ind:     
+                self.ax[1].plot(self.strong_lines[ind],1.0,'o',
+                                color='b',mec='r',
+                                picker=5,label='line_pnt')
+                self.ax[0].axvline(self.strong_lines[ind],c='b',ls=":",zorder=1,
+                             label='line_pnt')
+                self.strong_lines.pop(ind)
+            else:
+                print "Click closer to chosen point"
+            
+        plt.draw()
+
+    def ontype(self,event):
+        if event.key=='enter':
+            self.clean_plot()
+            self.update_plot()
+            plt.draw()
+      
+        elif event.key=='q':
+             exit()
+
+        elif event.key=='w':
+            print "Writing to output file..."
+            moog_output(out_file,a_line,self.lr)
+            print "Close the plot window to move on"
+        
+        else:
+            #if you accidentally hit any other key
+            pass
+    
+    def update_plot(self):
+        self.strong_lines = sorted(list(set(self.strong_lines)))
+        self.r_tab,self.lr = EW_analysis(line,x,f,self.strong_lines,
+                            v_lvl,l_eqw,h_eqw,det_level)
+                            
+        self.strong_lines= list(self.r_tab['mg'][1][:,0]) #fitted strong lines
+        self.make_plot()
+        plt.draw()
+        moog = moog_entry(a_line,self.lr[3],self.lr[4])
+        print_and_log(logfile,["\nCurrent moog entry:\n",moog])
+                                                
+        plt.gcf().canvas.mpl_connect('key_press_event',self.ontype)
+        plt.gcf().canvas.mpl_connect('button_press_event',self.onclick)
+
+    def run(self):
+        self.update_plot()
         print "Click on plot to edit line list:"
         print "(left button - add lines, right - remove lines)."
         print "Then hit enter to redo the plot"
-        print "Type 'w' to write the result to output file"
+        print "Type 'w' on active plot window \
+               to write the result to output file"
         print "q - quit"
-
-    elif event.key=='q':
-        exit()
-    elif event.key=='w':
-        r_tab = find_eqws(line,x,f,strong_lines)
-        
-        lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
-        moog= moog_entry(a_line,lr[3],lr[4])
-        print "Writing to output file..."
-        print_and_log([moog])
-        print "Close the plot window to move on"
-        
-    else:
-        #if you accidentally hit any other key
-        pass
-    plt.draw()
-
-def onclick(event):
-    # when none of the toolbar buttons is activated and the user clicks in the
-    # plot somewhere,
-    toolbar = plt.get_current_fig_manager().toolbar
-    if event.button==1 and toolbar.mode=='':
-        ind= np.abs((gggf_infm-event.xdata)).argmin()
-        ax2.plot(gggf_infm[ind],1.0,'o',color='r',mec='b',picker=5,label='line_pnt')
-        ax1.axvline(gggf_infm[ind],c='r',ls=":",zorder=1,label='line_pnt')
-        strong_lines.append(gggf_infm[ind])
-    elif event.button==3 and toolbar.mode=='':
-        ind= np.squeeze(np.where(np.abs(strong_lines-event.xdata)<0.01))
-        try:
-            ax2.plot(strong_lines[ind],1.0,'o',color='b',mec='r',picker=5,label='line_pnt')
-            ax1.axvline(strong_lines[ind],c='b',ls=":",zorder=1,label='line_pnt')
-            strong_lines.pop(ind)
-        except TypeError:
-            print "I see more than one line close to your point"
-            print "I can't deal with that"
-    plt.draw()   
+        plt.show()
 
 
 ######################################################
@@ -566,8 +646,10 @@ config.read(cfg_file)
 
 file_list = open(config.get('Input files','files_list')).readlines()
 line_list_file = config.get('Input files','line_list_file')
-lines=np.loadtxt(line_list_file,usecols=[0,1,2,3]) #Format: line element extitation_potential loggf, 
-                                 #all in MOOG like format, especially element
+
+lines=np.loadtxt(line_list_file,usecols=[0,1,2,3])
+#Format: line element extitation_potential loggf, 
+#all in MOOG like format, especially element
 
 off = config.getfloat('Spectrum','off')
 s_factor = config.getfloat('Spectrum','s_factor')
@@ -585,21 +667,11 @@ show_lines=np.array(config.get('Lines','show_lines').split(" "),dtype=float)
 
 
 for file_name in file_list:
-    print file_name
     file_name=file_name.strip()
-    file_name_out=file_name.split("/")[-1].split(".")[0]
-    log_name = file_name_out.split(".")[0]+"_EW.log"
-    logfile = open(log_name,'w')
-    
-    print "Line list:",line_list_file
-    logfile.write( "Line list: "+line_list_file+"\n")
-    list_name=line_list_file.split('.')[0]
-    out_file=open("moog_"+list_name+"_"+file_name_out.split(".")[0]+".out",'wb')
-    out_file.write(file_name_out+"\n")
+    #Create output files
+    logfile,out_file = create_out_files(file_name,line_list_file) 
     
     mgtab = np.empty((0,5),dtype=float)    
-    stab = np.empty((0,5),dtype=float)
-    m2tab = np.empty((0,6),dtype=float)    
     
     #Here calculations start    
     file=np.loadtxt(file_name)
@@ -608,12 +680,12 @@ for file_name in file_list:
     #Deal with rejt parameter    
     if rejt_auto == True:
         rejt,SN = auto_rejt(file,config)
-        print_and_log(["rejt parameter was found automatically"])
+        print_and_log(logfile,["rejt parameter was found automatically"])
     else:
-       print_and_log(["rejt parameter defined by user"])
+       print_and_log(logfile,["rejt parameter defined by user"])
        SN = 1.0/(1.0-rejt)
-    print_and_log(["rejt parameter:", rejt])
-    print_and_log(["signal to noise:", SN])
+    print_and_log(logfile,["rejt parameter:", rejt])
+    print_and_log(logfile,["signal to noise:", SN])
     
 #####################################################
     #Check where spectrum starts and ends
@@ -625,22 +697,24 @@ for file_name in file_list:
 #Lets analyze every single line
     for a_line in lines_in_spec:
         line,elem_id,exc_p,loggf=a_line
-        print_and_log(["\n#####\n",line,elem_id])
+        print_and_log(logfile,["\n#####\n",line,elem_id])
 
         d=file[np.where((file[:,0]>line-off) &(file[:,0]<line+off))]
         if d.shape[0]==0 or d[:,0].max()<line or d[:,0].min()>line:
-            print_and_log([ "Nothing to do in this range, probably gap in your spectra"])
+            print_and_log(logfile,[ "Nothing to do in this range, \
+                             probably gap in your spectra"])
             continue
         
         #Make spectrum linear
         #(default assumption - spectrum is not linear)
         lin1,dx=do_linear(d)
+
         
         #Correct continuum around chosen line
         try:
-             lin=correct_continuum(lin1,rejt)
+             lin,iter,p_no=correct_continuum(lin1,rejt)
         except:
-             print_and_log(["Unable to correct continuum"])
+             print_and_log(logfile,["Unable to correct continuum"])
              continue
 
         x=lin[:,0]
@@ -651,21 +725,22 @@ for file_name in file_list:
         
         #Find inflection points 
         gggf_infm,gggf_infp=find_inflection(x,gggf)
-        gf_infm,gf_infp=find_inflection(x,gf)
         
         #If there is no inflection points, go to next line on list
         if (gggf_infm.size==0 or gggf_infp.size==0):
             continue        
         
         #Identify strong lines automatically
-        strong_lines,noise=find_strong_lines(x,gggf,gggf_infm,r_lvl,SN)
+        strong_lines,thold=find_strong_lines(x,gggf,gggf_infm,r_lvl,SN)
         strong_lines=evaluate_lines(line,strong_lines,det_level,gggf_infm)
         
         if len(strong_lines)==0:
             continue
                 
-        print_and_log([ "I see", len(strong_lines),"line(s) in this range"])
-########################################################################        
+        print_and_log(logfile,[ "I see", len(strong_lines),
+                      "line(s) in this range"])
+
+################################################################################
         if line in show_lines and plot_flag==False:
             plot_line=True
         elif line not in show_lines and plot_flag==False:
@@ -674,81 +749,14 @@ for file_name in file_list:
             plot_line=True
         
         if not plot_line:
-        #do all fits: multi gauss, sgauss (part of multi gauss),
-        #gauss fitted in small area, voigt fitted in small area
-            r_tab = find_eqws(line,x,f,strong_lines) #results tab
-            print_mgauss_data(r_tab)
-        #Check if EW is reasonable
-            lr=evaluate_results(line,r_tab,v_lvl,l_eqw,h_eqw,det_level)
-            
-            if lr[3]>0.:
-                stab = np.append(stab,np.array([[line,lr[1],lr[3],lr[2],lr[4]]]),axis=0)
-                for slt in r_tab['mg'][1]:
-                    y= np.insert(slt,0,line)
-                    ew=get_gew(slt[1],slt[2])
-                    y = np.append(y,ew)
-                    mgtab=np.append(mgtab,np.array([y]),axis=0)
-
-        #Write to output file
-            moog= moog_entry(a_line,lr[3],lr[4])        
-            out_file.write(moog)
-            print moog+"\n"    
-            logfile.write(moog)        
-        #Ploting module - 
-        else:
-            fig = plt.figure()
-            interactive_mode=True
-            #Things that won't be changed
-            lstyle=np.array([['mg','c','-','multi Gauss',4],
-                    ['sg','b',':','line in mGauss',3],
-                    [ 'g', 'y','-','Gauss',2],
-                    [ 'v', 'm','-','Voigt',1]])
-            
-            x_formatter = matplotlib.ticker.ScalarFormatter(useOffset=False)
-            ax1=fig.add_subplot(2,1,1)
-            ax1.xaxis.set_major_formatter(x_formatter)
-            ax1.plot(x,f,'o',color= 'k' , label='spectrum')
-            ax1.axhline(1.0,color='g',label='continuum')
-            ax1.set_xlabel("Wavelenght")
-            ax1.legend(loc=2,numpoints=1,fontsize='10') 
-            ax1.set_ylim(min(f)-0.1,1+0.4*(1+0.1-min(f)))
-            ax1.set_title(str(a_line[1])+" "+str(line))           
-           
-            ax2=fig.add_subplot(2,1,2,sharex=ax1)
-            ax2.plot(x,np.zeros_like(x))
-            ax2.plot(x,gggf,'b', label='3rd derivative')
-            #ax2.plot(x,gf*-500.,'m', label='3rd derivative')
-            ax2.axhline(noise,c='r')
-            ax2.axhline(-noise,c='r')
-            ax2.plot(gggf_infm, np.zeros_like(gggf_infm),'o',color='b',
-                     label='flex points + -> -')
-            ax2.set_ylim(np.min(gggf),np.max(gggf))
-            ax2.set_xlim(line-off,line+off)
-            ax2.legend(loc=3,numpoints=1,fontsize='10',ncol=3)                            
-            print "Press enter to make a fit"
-            plt.gcf().canvas.mpl_connect('key_press_event',ontype)
-            plt.gcf().canvas.mpl_connect('button_press_event',onclick)
-                               
-            plt.show()           
-            print "############################\n"
-    if not plot_line:
-        print "Evaluation of FWHMs..."
-        out_file1=open("moog1_"+list_name+"_"+file_name_out,'wb')
-        out_file1.write(file_name_out+"\n")
-        #Second step - fit again but with xo and FWHM fixed
-        iter=True
-        while iter:
-            old= stab.shape[0]
-            a,b=np.polyfit(stab[:,1],stab[:,3],1)
-            stdev=np.std(stab[:,3]-np.polyval([a,b],stab[:,1]),ddof=1)
-            stab=stab[np.where(stab[:,3])]
-            stab = stab[np.where(np.abs(stab[:,3]-np.polyval([a,b],stab[:,1]))<3.*stdev)]
-            new= stab.shape[0]
-            if old==new:
-                iter=False
+            r_tab,lr = EW_analysis(line,x,f,strong_lines,v_lvl,
+                                l_eqw,h_eqw,det_level)
+            moog_output(out_file,a_line,lr)
         
-        for l in stab:
-            ld=lines[np.where(lines[:,0]==l[0])][0]
-            m1=moog_entry(ld, l[2],l[4])
-            out_file1.write(m1)
-                
+        #Ploting module - 
+        else:      
+            fig,ax = plt.subplots(2,sharex=True)
+            p = Plot_Module(ax,line,x,f,strong_lines,
+                            v_lvl,l_eqw,h_eqw,det_level,thold)
+            p.run()
+
