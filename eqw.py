@@ -505,6 +505,7 @@ class Plot_Module(object):
         self.strong_lines = strong_lines
         
         x_formatter = matplotlib.ticker.ScalarFormatter(useOffset=False)
+        self.ax[0].set_title("%s %s" % (a_line[0],a_line[1]))
         self.ax[0].xaxis.set_major_formatter(x_formatter)
         self.ax[0].axhline(1.0,color='g',label='continuum')
         self.ax[0].set_xlabel("Wavelenght")
@@ -519,6 +520,7 @@ class Plot_Module(object):
                      label='flex points + -> -')
         self.ax[1].axhline(-thold,c='r')
         self.ax[1].axhline( thold,c='r')
+        
 
         self.lstyle=np.array([['mg','c','-','multi Gauss',4],
                               ['sg','b',':','line in mGauss',3],
@@ -628,12 +630,14 @@ class Plot_Module(object):
 
     def run(self):
         self.update_plot()
-        print "Click on plot to edit line list:"
+        print "########################################"
+        print "Click on plot to edit strong lines list:"
         print "(left button - add lines, right - remove lines)."
         print "Then hit enter to redo the plot"
         print "Type 'w' on active plot window \
-               to write the result to output file"
-        print "q - quit"
+               \n to write the result to output file"
+        print "q - to quit"
+        print "#######################################"
         plt.show()
 
 
