@@ -382,9 +382,10 @@ def voigt_fwhm(alphaD,alphaL):
 ######################################################
 #Other
 ######################################################
-def pm_3sig(x,x01,s1): #s1 is fwhm
-    iu=np.abs(x-x01-1.*np.abs(s1)).argmin()
-    il=np.abs(x-x01+1.*np.abs(s1)).argmin()
+def pm_width(x,x01,s1): #s1 is fwhm
+    print "factor:",w_factor,s1
+    iu=np.abs(x-x01-w_factor*np.abs(s1)).argmin()
+    il=np.abs(x-x01+w_factor*np.abs(s1)).argmin()
     
     if iu==il or np.abs(iu-il)<10.:
         il=0
@@ -422,7 +423,7 @@ def find_eqws(line,x,f,strong_lines):
     sparams=[a1,x01,s1]    
 
     #Determine region close to gaussian line center#
-    il, iu = pm_3sig(x,x01,s1)
+    il, iu = pm_width(x,x01,s1)
     
     oc_mg=np.average(np.abs(f[il:iu]-1.0+mgaus[il:iu]))
     oc_sg=np.average(np.abs(f[il:iu]-1.0+sgaus[il:iu]))
@@ -539,8 +540,8 @@ class Plot_Module(object):
         
         x01 = self.r_tab['sg'][1][1]
         s1  = self.r_tab['sg'][1][2]
-        self.ax[0].axvspan(x01-0.8*s1,x01+0.8*s1,color='g',
-                           alpha=0.25,label="pm3s")   
+        self.ax[0].axvspan(x01-w_factor*s1,x01+w_factor*s1,color='g',
+                           alpha=0.25,label="eval. area")   
         self.ax[0].legend(loc=2,numpoints=1,fontsize='10',ncol=4)
         
         
@@ -558,7 +559,7 @@ class Plot_Module(object):
             if hasattr(artist,'get_label') and (
                  artist.get_label() in self.lstyle[:,3] or  
                  artist.get_label()=="line" or  
-                 artist.get_label()=='pm3s' or 
+                 artist.get_label()=='eval. area' or 
                  artist.get_label()=='strong lines' or 
                  artist.get_label()=='line_pnt'):
                 artist.remove()        
@@ -662,6 +663,7 @@ rejt = config.getfloat('Spectrum','rejt')
 #if rejt_auto is True, rejt from config file will be ignored
 
 r_lvl = config.getfloat('Lines','r_lvl')
+w_factor = config.getfloat('Lines','w_factor')
 l_eqw = config.getfloat('Lines','l_eqw')
 h_eqw = config.getfloat('Lines','h_eqw')
 v_lvl = config.getfloat('Lines','v_lvl')
