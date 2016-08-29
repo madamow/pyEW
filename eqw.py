@@ -219,6 +219,7 @@ def evaluate_lines(line,strong_lines,det_level,gggf_infm):
 def leastsq_errors(fit_tab,p_no): #so.leastsq result+no of parameters fitted
     #use so.leastsq output to estimate error parameter
     pcov=fit_tab[1]
+
     if pcov is None:
         row_col=((len(fit_tab[0])/p_no)*p_no)
         print "Covariance matrix is empty"
@@ -238,8 +239,8 @@ def leastsq_errors(fit_tab,p_no): #so.leastsq result+no of parameters fitted
 ######################################################
 AGAUSS = -4.0 * np.log(2.0)
 
-def gaus(x,a,x0,fwhm):
-    return a * np.exp(AGAUSS * ((x - x0) / fwhm)**2)
+def gaus(x_in,a,x0,fwhm):
+    return a * np.exp(AGAUSS * ((x_in - x0) / fwhm)**2)
 
 def multiple_gaus(x,params):
     mg=np.zeros_like(x)
@@ -248,23 +249,12 @@ def multiple_gaus(x,params):
         mg=mg+gaus(x,a,x0,fwhm)
     return mg
 
-def d_multiple_gaus(x,ds,x0s,fwhms):
-    mg=np.zeros_like(x)
-    for i,a in enumerate(ds):
-        mg=mg+gaus(x,a,x0s[i],fwhms[i])
-    return mg
-
 def res_g(p,data):
     x,y=data
     a,x0,fwhm=p
     sg=gaus(x,a,x0,fwhm)
     err=1./np.abs(y)
     return (y-sg)/err
-
-def res_d_mg(p,x,y,xo,fwhm):
-    mg=d_multiple_gaus(x,p,xo,fwhm)
-    err=1./np.abs(y)
-    return (y-mg)/err
     
 def res_mg(p,x,y,nb):
     params=np.reshape(p,(nb,3))
@@ -274,7 +264,7 @@ def res_mg(p,x,y,nb):
     
 def get_gew(ag,fwhmg):
     #calculate EW for gaussian profile
-    gew=0.5*ag*np.sqrt(np.pi)*np.abs(fwhmg)*1000./np.sqrt(np.log(2))
+    gew=500.*ag*np.sqrt(np.pi/np.log(2))*fwhmg
     return gew
 
 def fit_single_Gauss(x,f,a1,x01,fwhm1):
@@ -284,9 +274,10 @@ def fit_single_Gauss(x,f,a1,x01,fwhm1):
     a1s,x01s,fwhm1s=gaus_p[0]
 
     eqw_gf=get_gew(a1s,fwhm1s)
-
+    
     gf_errs=leastsq_errors(gaus_p,3)
-    eqw_gf_err= eqw_gf*(gf_errs[0,1]/a1s+gf_errs[0,2]/np.abs(fwhm1s))
+    
+    eqw_gf_err = eqw_gf*(gf_errs[0,0]/a1s+gf_errs[0,2]/fwhm1s)
     return eqw_gf,eqw_gf_err,gaus_p[0]
 
 def fit_multi_Gauss(x,f,strong_lines):
@@ -305,19 +296,12 @@ def fit_multi_Gauss(x,f,strong_lines):
         ind=np.where(np.abs(strong_lines-new_params[:,0])<det_level)
         strong_lines=np.array(strong_lines)[ind]
         params=new_params[ind]
+
         
-    mg_errs=leastsq_errors(plsq,3)
+    mg_errs=leastsq_errors(plsq,3) #fit quality
+
     return params,mg_errs
 
-def fit_depth_mGauss(x,f,params):
-    depth=params[:,1]
-    xos=params[:,0]
-    fwhm=params[:,2]
-    plsq=so.leastsq(res_d_mg,depth,
-             args=(x,1.0-f,xos,fwhm),full_output=1)
-    params[:,1]=plsq[0]
-    mg_errs=leastsq_errors(plsq,1)
-    return params,mg_errs
 
 ######################################################
 #Voigt fitting
@@ -383,11 +367,10 @@ def voigt_fwhm(alphaD,alphaL):
 #Other
 ######################################################
 def pm_width(x,x01,s1): #s1 is fwhm
-    print "factor:",w_factor,s1
     iu=np.abs(x-x01-w_factor*np.abs(s1)).argmin()
     il=np.abs(x-x01+w_factor*np.abs(s1)).argmin()
-    
-    if iu==il or np.abs(iu-il)<10.:
+        
+    if iu==il or np.abs(iu-il)<3.:
         il=0
         iu=len(x)            
     return il,iu
@@ -415,7 +398,7 @@ def find_eqws(line,x,f,strong_lines):
     x01,a1,s1= params[ip,:]    
     
     eqw=get_gew(a1,s1)
-    eqw_err= eqw*(mg_errs[ip,1]/a1+mg_errs[ip,2]/np.abs(s1))
+    eqw_err= eqw*(mg_errs[ip,0]/a1+mg_errs[ip,2]/s1)
     
     #Calculate single gauss profile 
     #(this gauss is a part of multigaussian fit)
@@ -425,8 +408,8 @@ def find_eqws(line,x,f,strong_lines):
     #Determine region close to gaussian line center#
     il, iu = pm_width(x,x01,s1)
     
-    oc_mg=np.average(np.abs(f[il:iu]-1.0+mgaus[il:iu]))
-    oc_sg=np.average(np.abs(f[il:iu]-1.0+sgaus[il:iu]))
+    oc_mg=np.std(np.abs(f[il:iu]-1.0+mgaus[il:iu]))
+    oc_sg=np.std(np.abs(f[il:iu]-1.0+sgaus[il:iu]))
     
     results=append_to_dict(results,'mg',mgaus,params,eqw,eqw_err,oc_mg)
     results=append_to_dict(results,'sg',sgaus,sparams,eqw,eqw_err,oc_sg)                                                         
@@ -434,12 +417,15 @@ def find_eqws(line,x,f,strong_lines):
     #Fit single Gauss and Voigt profile
     eqw_gf,eqw_gf_err,gparams=fit_single_Gauss(x[il:iu],f[il:iu],a1,x01,s1)
     gausf=gaus(x,gparams[0],gparams[1],gparams[2])    
-    oc_g=np.average(np.abs(f[il:iu]-1.0+gausf[il:iu]))
+    oc_g=np.std(np.abs(f[il:iu]-1.0+gausf[il:iu]))
     results=append_to_dict(results,'g',gausf,gparams,eqw_gf,eqw_gf_err,oc_g)       
     
-    I, v_errs,vpar=fit_Voigt(x[il:iu],f[il:iu],x01)
+    try:
+        I, v_errs,vpar=fit_Voigt(x[il:iu],f[il:iu],x01)
+    except:
+        I, v_errs,vpar=fit_Voigt(x,f,x01)
     svoigt=Voigt(x,vpar[0],vpar[1], vpar[2], vpar[3],0.,0.)    
-    oc_v=np.average(np.abs(f[il:iu]-1.0+svoigt[il:iu]))
+    oc_v=np.std(np.abs(f[il:iu]-1.0+svoigt[il:iu]))
     results=append_to_dict(results,'v',svoigt,vpar,I,v_errs,oc_v)       
 
     return results
@@ -649,7 +635,7 @@ config = ConfigParser.ConfigParser()
 cfg_file = sys.argv[1]
 config.read(cfg_file)
 
-file_list = open(config.get('Input files','files_list')).readlines()
+file_list = np.genfromtxt(config.get('Input files','files_list'),dtype=None)
 line_list_file = config.get('Input files','line_list_file')
 
 lines=np.loadtxt(line_list_file,usecols=[0,1,2,3])
@@ -671,9 +657,14 @@ det_level = config.getfloat('Lines','det_level')
 plot_flag = config.getboolean('Lines','plot_flag')
 show_lines=np.array(config.get('Lines','show_lines').split(" "),dtype=float)
 
+#When there is only 1 element in spectra list
+if file_list.size==1:
+    file_list=np.append(file_list,["end_iter"])
+
 
 for file_name in file_list:
-    file_name=file_name.strip()
+    if file_name=="end_iter":
+        exit()
     #Create output files
     logfile,out_file = create_out_files(file_name,line_list_file) 
     
@@ -706,6 +697,7 @@ for file_name in file_list:
         print_and_log(logfile,["\n#####\n",line,elem_id])
 
         d=file[np.where((file[:,0]>line-off) &(file[:,0]<line+off))]
+        print d.shape
         if d.shape[0]==0 or d[:,0].max()<line or d[:,0].min()>line:
             print_and_log(logfile,[ "Nothing to do in this range, \
                              probably gap in your spectra"])
