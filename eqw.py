@@ -271,7 +271,7 @@ def fit_single_Gauss(x,f,a1,x01,fwhm1):
     gaus_p = so.leastsq(res_g,[a1,x01,fwhm1],
              args=([x,1.0-f]),
              full_output=1)
-    a1s,x01s,fwhm1s=gaus_p[0]
+    a1s,x01s,fwhm1s=np.abs(gaus_p[0])
 
     eqw_gf=get_gew(a1s,fwhm1s)
     
@@ -300,7 +300,7 @@ def fit_multi_Gauss(x,f,strong_lines):
         
     mg_errs=leastsq_errors(plsq,3) #fit quality
 
-    return params,mg_errs
+    return np.abs(params),mg_errs
 
 
 ######################################################
@@ -350,7 +350,7 @@ def fit_Voigt(x,f,x01):
               args=([x,1.0-f,np.ones_like(x)]),
               full_output=1)
                                
-    alphaD,alphaL, nu_0, A_voigt=voigt_p[0]
+    alphaD,alphaL, nu_0, A_voigt=np.abs(voigt_p[0])
 
     I=voigt_p[0][3]*1000.
     v_errs=leastsq_errors(voigt_p,4)[0][3]
