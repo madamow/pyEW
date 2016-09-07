@@ -352,7 +352,7 @@ def fit_Voigt(x,f,x01):
                                
     alphaD,alphaL, nu_0, A_voigt=np.abs(voigt_p[0])
 
-    I=voigt_p[0][3]*1000.
+    I=np.abs(voigt_p[0][3])*1000.
     v_errs=leastsq_errors(voigt_p,4)[0][3]
 
     return I,v_errs,voigt_p[0]
