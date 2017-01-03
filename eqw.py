@@ -691,6 +691,7 @@ for file_name in file_list:
     #Here calculations start    
     file=np.loadtxt(file_name)
 
+
 ###################################################
     #Deal with rejt parameter    
     if rejt_auto == True:
@@ -701,25 +702,17 @@ for file_name in file_list:
        SN = 1.0/(1.0-rejt)
     print_and_log(logfile,["rejt parameter:", rejt])
     print_and_log(logfile,["signal to noise:", SN])
-    
-#####################################################
-    #Check where spectrum starts and ends
-    #Check if your line list fits to this range
-    #If not, crop the linelist
-    lines_in_spec = lines[np.where(( lines[:,0]<file[:,0].max()-off) &
-                          (lines[:,0]>file[:,0].min()+off))]
+
 
 #####################################################
 #Lets analyze every single line
-    for a_line in lines_in_spec:
+    for a_line in lines:
         line,elem_id,exc_p,loggf=a_line
         print_and_log(logfile,["\n#####\n",line,elem_id])
 
         d=file[np.where((file[:,0]>line-off) &(file[:,0]<line+off))]
-        print d.shape
         if d.shape[0]==0 or d[:,0].max()<line or d[:,0].min()>line:
-            print_and_log(logfile,[ "Nothing to do in this range, \
-                             probably gap in your spectra"])
+            print_and_log(logfile,[ "Nothing to do for line", line])
             continue
         
         #Make spectrum linear
