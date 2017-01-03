@@ -9,7 +9,7 @@ from scipy.special import erf
 from scipy.special import wofz
 import ConfigParser
 import sys
-plt.switch_backend('qt4Agg')
+plt.switch_backend('qt5Agg')
 
 #####################################################
 #Print on screen and write to files functions
@@ -29,7 +29,8 @@ def print_line_info(rslt):
                 'sg':'part of mGauss','g':'Gauss','v':'Voigt'}
     for fit in rslt:
         finfo= "%15s %s %4.2f %s %f %s %f" % \
-        (fit_labels[fit],": EW =" ,rslt[fit][2],"eEW =",rslt[fit][3],"o-c:",rslt[fit][4])
+        (fit_labels[fit],": EW =" ,rslt[fit][2],\
+        "fq =",rslt[fit][3],"o-c:",rslt[fit][4])
         print_and_log(logfile,[finfo])
 
 def print_mgauss_data(rslt):
@@ -83,8 +84,18 @@ def do_linear(spectrum):
     out=np.transpose(np.vstack((x,y)))
     return out,res
 
-def correct_continuum(spec,rejt):  
+def correct_continuum(spec1,rejt,t_sigma):  
     stop=False
+    #Cut hot pixels from the top
+    thresh = t_sigma * np.std(spec1[:,1]) +1.0
+    spec=spec1[np.where(spec1[:,1]<thresh)]
+    
+    hot_no=spec1[np.where(spec1[:,1]>thresh)].shape[0]
+    
+    print_and_log(logfile,["Points with flux values >","%4.2f" % thresh,
+                  "will be removed from continuum fit"])
+    print_and_log(logfile,[hot_no,"point(s) removed"])
+    
     tab=np.copy(spec)
     p_no=0
     iter=0.0
@@ -124,7 +135,7 @@ def auto_rejt(tab,config):
     
     for item in rejt_reg:
         r_low,r_up=item
-        reg,rres=do_linear(file[np.where((tab[:,0]>r_low) &(tab[:,0]<r_up))])
+        reg,rres=do_linear(file[np.where((tab[:,0]>r_low) & (tab[:,0]<r_up))])
         reg_smo= ndimage.gaussian_filter1d(reg[:,1],sigma=s_factor,mode='wrap')
         rejt_tab.append(np.std(reg[:,1]-reg_smo))
     
@@ -143,10 +154,14 @@ def find_derivatives(x,f,dx,s_factor):
     dxdxdx=dx*dx*dx 
     #First derivative
     gf = ndimage.gaussian_filter1d(f, sigma=s_factor, order=1, mode='wrap') / dx
+    
     #Second derivative
-    ggf = ndimage.gaussian_filter1d(f, sigma=s_factor, order=2, mode='wrap') / (dx*dx)
+    ggf = ndimage.gaussian_filter1d(f, sigma=s_factor, 
+          order=2, mode='wrap') / (dx*dx)
+    
     #Third derivative
-    gggf = np.array(ndimage.gaussian_filter1d(f, sigma=s_factor, order=3, mode='wrap') / dxdxdx)
+    gggf = np.array(ndimage.gaussian_filter1d(f, sigma=s_factor, 
+           order=3, mode='wrap') / dxdxdx)
     
     return gf,ggf,gggf
 
@@ -190,7 +205,8 @@ def find_strong_lines(x,tab,xo,r_lvl,SN):
             indx= np.abs(max_tab[0,:]-item).argmin()
             indm= np.abs(min_tab[0,:]-item).argmin()
         
-            if ((np.abs(max_tab[1,indx])>thold) and (np.abs(min_tab[1,indm])>thold)):
+            if ((np.abs(max_tab[1,indx])>thold) and \
+            (np.abs(min_tab[1,indm])>thold)):
                 str_lines.append(item)
             
     return str_lines,thold
@@ -199,13 +215,17 @@ def evaluate_lines(line,strong_lines,det_level,gggf_infm):
     #check if our line was identified
     if (len(strong_lines)==0 and  (np.abs(gggf_infm-line).min()>det_level)):
         print line, "was not detected"
-    elif (len(strong_lines)==0 and (np.abs(gggf_infm-line).min()<det_level)):#no strong lines detected
-        print "I see no strong lines here,but weak line close to", line,"was detected"
+    elif (len(strong_lines)==0 and (np.abs(gggf_infm-line).min()<det_level)):
+        #no strong lines detected
+        print "I see no strong lines here,but a weak line close to", line,\
+        "was detected"
         strong_lines.append(line) 
-    elif (len(strong_lines)>0 and np.abs(gggf_infm-line).min()<det_level and np.abs(strong_lines-line).min()<det_level):
+    elif (len(strong_lines)>0 and np.abs(gggf_infm-line).min()<det_level and \
+    np.abs(strong_lines-line).min()<det_level):
         print "line",line," was detected and it was classified as a strong line"
         pass
-    elif (len(strong_lines)>0 and (np.abs(gggf_infm-line).min()<det_level) and np.abs(strong_lines-line).min()>det_level):
+    elif (len(strong_lines)>0 and (np.abs(gggf_infm-line).min()<det_level) and \
+    np.abs(strong_lines-line).min()>det_level):
         print "I see this line at",line,", but it is weak"
         strong_lines.append(line)
     else:
@@ -486,8 +506,7 @@ def EW_analysis(line,x,f,strong_lines,v_lvl,l_eqw,h_eqw,det_level):
 ######################################################        
 class Plot_Module(object):        
 
-    def __init__(self,ax,line,x,f,strong_lines,v_lvl,l_eqw,h_eqw,
-                 det_level,thold):
+    def __init__(self):
         self.ax = ax
         self.strong_lines = strong_lines
         
@@ -507,13 +526,11 @@ class Plot_Module(object):
                      label='flex points + -> -')
         self.ax[1].axhline(-thold,c='r')
         self.ax[1].axhline( thold,c='r')
-        
 
         self.lstyle=np.array([['mg','c','-','multi Gauss',4],
                               ['sg','b',':','line in mGauss',3],
                               [ 'g', 'y','-','Gauss',2],
                               [ 'v', 'm','-','Voigt',1]])
-
           
     def make_plot(self):   
         for lbl in self.r_tab:
@@ -646,6 +663,7 @@ off = config.getfloat('Spectrum','off')
 s_factor = config.getfloat('Spectrum','s_factor')
 rejt_auto = config.getboolean('Spectrum','rejt_auto')
 rejt = config.getfloat('Spectrum','rejt')
+t_sig = config.getfloat('Spectrum','t_sig')
 #if rejt_auto is True, rejt from config file will be ignored
 
 r_lvl = config.getfloat('Lines','r_lvl')
@@ -688,7 +706,8 @@ for file_name in file_list:
     #Check where spectrum starts and ends
     #Check if your line list fits to this range
     #If not, crop the linelist
-    lines_in_spec = lines[np.where(( lines[:,0]<file[:,0].max()-off) & (lines[:,0]>file[:,0].min()+off))]
+    lines_in_spec = lines[np.where(( lines[:,0]<file[:,0].max()-off) &
+                          (lines[:,0]>file[:,0].min()+off))]
 
 #####################################################
 #Lets analyze every single line
@@ -710,7 +729,7 @@ for file_name in file_list:
         
         #Correct continuum around chosen line
         try:
-             lin,iter,p_no=correct_continuum(lin1,rejt)
+             lin,iter,p_no=correct_continuum(lin1,rejt,t_sig)
         except:
              print_and_log(logfile,["Unable to correct continuum"])
              continue
@@ -754,7 +773,6 @@ for file_name in file_list:
         #Ploting module - 
         else:      
             fig,ax = plt.subplots(2,sharex=True)
-            p = Plot_Module(ax,line,x,f,strong_lines,
-                            v_lvl,l_eqw,h_eqw,det_level,thold)
+            p = Plot_Module()
             p.run()
 
