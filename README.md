@@ -1,16 +1,21 @@
 # pyEW
 Python functions for finding equivalent widths of spectral lines
 
-To run this program you need those python libraries:
+# What do you need?
+ To use pyEW you need Python 2.7 and those libraries:
 
 *numpy
-http://docs.scipy.org/doc/numpy/user/install.html
-
-*scipy (works with version 0.13)
-http://www.scipy.org/scipylib/download.html
-
+*scipy (version 0.13 or later)
 *matplotlib
+*PyQt5 (pyEW needs qt5Agg backend)
+
+Install instructions can be found here:
+http://scipy.org/install.html
 http://matplotlib.org/users/installing.html
+
+If you are a python user, you probably have those packages already installed. If python is new to you, I recomend anaconda or miniconda for installation and updates.
+https://www.continuum.io/downloads
+http://conda.pydata.org/miniconda.html
 
 
 Stellar spectrum
