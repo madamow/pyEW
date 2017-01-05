@@ -5,16 +5,22 @@ What do you need?
  To use pyEW you need Python 2.7 and those libraries:
 
 *numpy
+
 *scipy (version 0.13 or later)
+
 *matplotlib
+
 *PyQt5 (pyEW needs qt5Agg backend)
 
 Install instructions can be found here:
 http://scipy.org/install.html
+
 http://matplotlib.org/users/installing.html
 
 If you are a python user, you probably have those packages already installed. If python is new to you, I recomend anaconda or miniconda for installation and updates.
+
 https://www.continuum.io/downloads
+
 http://conda.pydata.org/miniconda.html
 
 Prepare config file
