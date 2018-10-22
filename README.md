@@ -18,21 +18,24 @@ to a directory of your choice and install with `python setup.py install`.
 ### Quick start:
 `pyew your_config_file`
 
-###Config file
+### Input files
+
+- Stellar spectrum - an ascii file with wavelength 
+in the first column and normalized flux in the second.
+- Line list file - an ascii file with information on spectal lines. Each line of this file should include: wavelength, 
+element (in MOOG format), excitation potential, log gf.
+- List of files for analysis, full path to files with stellar spectrum, one per line.
+
+### Config file
 Config file includes all parameters required by pyEW.  Do no remove any keyword or section.
 Copy this file to your project and edit it so it suits your needs.
 
 
 `Input files` section:
-- files_list - full path to file that includes all spectra for analysis.
-There might be more than one spectrum listed on this list.
-Stellar spectrum has to be written as an ascii file with wavelength 
-in the first column and flux in second. Full path to spectrum files must be provided.
-It should be normalized and in laboratory wavelength scale.
+- files_list - full path to file that includes a list of spectra for analysis.
+There might be more than one spectrum listed on this list. 
 - line_list_file - full path to a file that includes a list of lines for analysis.
-   Each line of this file should include: wavelength, element (in MOOG format), 
-   excitation potential, log gf.
-  
+ 
 
 `Spectrum section`:
 - off - defines the range of spectrum around chosen line that will be analyzed. 
@@ -70,7 +73,7 @@ or  line1 line2 ... otherwise.
 
 
 
-###Example
+### Example
 
 Go to `pyEW/example` catalog and open `sun.config` file for edition.
 Then edit  `pyEW/example/spectra.list` so it includes FULL path to sun.asc file.
@@ -80,7 +83,7 @@ Run example files with:
 
 
 
-####Output file
+### Output file
 - is in format required by MOOG
 - some extra information are placed at the end of line,
   like estimated error, width of a line (gaussian sigma),line depth.
