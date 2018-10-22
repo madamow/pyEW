@@ -1,51 +1,86 @@
 # pyEW
-Python functions for finding equivalent widths of spectral lines
+### Tools for finding equivalent widths of spectral lines
 
-What do you need?
- To use pyEW you need Python 2.7 and those libraries:
 
-*numpy
+### Requires the following Python (2.7) libraries:
+- numpy
+- scipy
+- matplotib
+- PyQt5 (pyEW needs qt5Agg backend)
 
-*scipy (version 0.13 or later)
 
-*matplotlib
 
-*PyQt5 (pyEW needs qt5Agg backend)
+### Installation:
 
-Install instructions can be found here:
-http://scipy.org/install.html
+Copy or clone the github repository
+to a directory of your choice and install with `python setup.py install`.
 
-http://matplotlib.org/users/installing.html
+### Quick start:
+`pyew your_config_file`
 
-If you are a python user, you probably have those packages already installed. If python is new to you, I recomend anaconda or miniconda for installation and updates.
+###Config file
+Config file includes all parameters required by pyEW.  Do no remove any keyword or section.
+Copy this file to your project and edit it so it suits your needs.
 
-https://www.continuum.io/downloads
 
-http://conda.pydata.org/miniconda.html
-
-Prepare config file
-Open eqw.config file for editing. Do not remove any keyword or section. 
-In Input files section:
-- files_list - a list of files with stellar spectrum. There might be more than one.
-Stellar spectrum has to be written as an ascii file.
-It should be normalized and in laboraroty wavelength scale
-
-- line_list_file - pyEW is written to give an output file ready for MOOG,
-  hence in line list you need to include: wavelength, element (MOOG format), excitation potential, log gf.
+`Input files` section:
+- files_list - full path to file that includes all spectra for analysis.
+There might be more than one spectrum listed on this list.
+Stellar spectrum has to be written as an ascii file with wavelength 
+in the first column and flux in second. Full path to spectrum files must be provided.
+It should be normalized and in laboratory wavelength scale.
+- line_list_file - full path to a file that includes a list of lines for analysis.
+   Each line of this file should include: wavelength, element (in MOOG format), 
+   excitation potential, log gf.
   
 
-In Spectrum section:
-- off - defines the range of spectrum around chosen lines that will be analyzed. The range will be defined as: [x0-off, x0+off], x0 is a center of line to be measured. 
-- s_factor - smoothing. Usually 3 or 4 is fine. This number should be lower if in defined range the numer of points is low (low resolution spectra, or very narrow range).
+`Spectrum section`:
+- off - defines the range of spectrum around chosen line that will be analyzed. 
+The range will be defined as: [x0-off, x0+off], where x0 is a center of line to be measured. 
+- s_factor - a parameter for smoothing. Usually 3 or 4 is fine. T
+his number should be lower if in defined range the number of points 
+is low.
+- rejt_auto - the value should be True or False. If True, signal to noise (SN) 
+will be calculated based on ranges provided in the next setion of the config file.
+The SN is required for local continuum fitting. If rejt_auto is set to False,
+value specified by user will be used.
+- local_cont - True or False - fit local continuum.
+- rejt - parameter for local continuum fitting if rejt_auto = False. 
+It is defined as 1 - 1/SN (see ARES paper for the definition od rejt:
+ http://www.astro.up.pt/~sousasag/ares/2007_AA_Sousa.pdf )
+- t_sig - threshold for hot pixels (t_sig * standard deviation of flux values) 
 
-- rejt_auto - the value should be True or False. If True, signal to noise (SN) will be calculated based on ranges provided in the next setion of the config file. The SN is required for local continuum fitting. If rejt_auto is set to False, value specified by user will be used.
+ `Lines ` section:
+- r_lvl - minimum level for finding strong lines. This is applied to third derivative 
+as r_lvl * standard deviation(3rd derivative)
+and presented as two red,vertical lines on lower panel of the plot. 
+The purpose of this is to control the number of lines introduced to multi gaussian fit.
+- w_factor - area around center of line: x0 +/- fwhm * w_factor. Defines green-shaded region around 
+line center 
+- l_eqw - minimum value of equivalent width (EW) (in mA) to consider.
+ This parameter is set to eliminate lines too week to beincluded in this analysis.
+- h_eqw - maximum value of EW in mA. This parameter is  to eliminate lines too strong 
+and possibly saturated that should not be included in the analysis.
+- det_level - maximum difference (in A) between x0 and line position in spectrum.
+- v_lvl - minimum reduced eqw that should be used for considering if Voigt profile
+should be considered in analysis.If rEW>v_lvl, check Voigt profile.
+- plot_flag - True or False - should I do plot for ALL lines?
+- show_lines - show plot for some lines, 0 if no lines should be plotted, 
+or  line1 line2 ... otherwise.
 
-- rejt - parameter for local continuum fitting if rejt_auto = False. It is defined as 1 - 1/SN (see also ARES paper)
-
-- t_sig - threshold for hot pixels. 
 
 
-Output file
+###Example
+
+Go to `pyEW/example` catalog and open `sun.config` file for edition.
+Then edit  `pyEW/example/spectra.list` so it includes FULL path to sun.asc file.
+Run example files with:
+
+`pyew sun.config`
+
+
+
+####Output file
 - is in format required by MOOG
 - some extra information are placed at the end of line,
   like estimated error, width of a line (gaussian sigma),line depth.

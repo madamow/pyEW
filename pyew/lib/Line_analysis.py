@@ -123,3 +123,4 @@ def EW_analysis(line, spec, strong_lines, cfile, logfile):
     lr = evaluate_results(line, r_tab, cfile, logfile)
 
     return r_tab, lr
+

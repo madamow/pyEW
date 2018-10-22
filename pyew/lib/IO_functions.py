@@ -68,7 +68,7 @@ def print_line_info(rslt, logfile):
 
 # OUTPUT : LOGFILE
 def create_log(fname):
-    logfile = open(fname.split(".")[0] + ".log", 'w')
+    logfile = open(fname.split("/")[-1].split(".")[0] + ".log", 'w')
     return logfile
 
 
@@ -82,8 +82,9 @@ def print_and_log(logfile, list_of_inps):
 def create_out(fname, cfile):
     # Create an output file
     out_name = "moog_" + \
-               cfile.get('Input files', 'line_list_file') + "_" + \
+               cfile.get('Input files', 'line_list_file').split("/")[-1] + "_" + \
                fname.split("/")[-1].split(".")[0] + ".out"
+
     return open(out_name, 'w')
 
 
