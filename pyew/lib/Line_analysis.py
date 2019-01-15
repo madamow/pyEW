@@ -60,7 +60,7 @@ def find_eqws(line, spec, strong_lines, cfile):
     results = append_to_dict(results, 'g', gausf, gparams, eqw_gf, eqw_gf_err, oc_g)
 
     try:
-        I, v_errs, vpar = fit_voigt(spec[il:iu, 0], spec[il:iu, 1], x01)
+        I, v_errs, vpar = fit_Voigt(spec[il:iu, 0], spec[il:iu, 1], x01)
     except:
         I, v_errs, vpar = fit_Voigt(spec[:, 0], spec[:, 1], x01)
     svoigt = Voigt(spec[:, 0], vpar[0], vpar[1], vpar[2], vpar[3], 0., 0.)
