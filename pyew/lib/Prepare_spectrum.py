@@ -3,6 +3,7 @@ from IO_functions import print_and_log
 from scipy import ndimage
 from scipy.signal import argrelextrema
 
+
 # Prepare observed spectrum for analysis
 
 
@@ -44,6 +45,7 @@ def calculate_snr(spec, cfile, logfile):
 
     return rejt, snr
 
+
 def get_snr(spec, cfile, logfile):
     # Check if rejt parameter is defined by user.
     # If not - calculate it from observed spectrum
@@ -76,8 +78,9 @@ def hot_pixels(spec, t_sigma, logfile):
 
     return clean
 
+
 def smooth(y, box_pts):
-    #smooths function, recipe from StackOverflow
+    # smooths function, recipe from StackOverflow
     box = np.ones(box_pts) / box_pts
     y_smooth = np.convolve(y, box, mode='same')
     return y_smooth
@@ -124,8 +127,10 @@ def derivatives(flux, dx, s_factor):
 
     return gf, ggf, gggf
 
+
 def get_thold(gggf, r_lvl):
     return np.std(gggf) * r_lvl
+
 
 def find_inflection(x, y):
     # This function finds zero points for set of data
@@ -138,15 +143,16 @@ def find_inflection(x, y):
     for i in np.arange(0, len(y) - 1, 1):
         a = (y[i + 1] - y[i]) / (x[i + 1] - x[i])
         b = y[i] - a * x[i]
-        if y[i] > 0.0 and y[i + 1] < 0.0:
+        if y[i + 1] < 0.0 < y[i]:
             to_minus.append(-b / a)
-        elif y[i] < 0.0 and y[i + 1] > 0:
+        elif y[i] < 0.0 < y[i + 1]:
             to_plus.append(-b / a)
 
     to_minus = np.array(to_minus)
     to_plus = np.array(to_plus)
 
     return to_minus, to_plus
+
 
 def find_flex_points(spec, dx, cfile):
     # Find derivatives
@@ -156,6 +162,7 @@ def find_flex_points(spec, dx, cfile):
     gggf_infm, gggf_infp = find_inflection(spec[:, 0], gggf)
 
     return gggf_infm, gggf_infp, gggf
+
 
 def evaluate_lines(line, strong_lines, det_level, gggf_infm, logfile):
     # check if our line was identified
