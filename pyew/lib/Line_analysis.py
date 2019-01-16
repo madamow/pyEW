@@ -12,16 +12,7 @@ def pm_width(x, x01, s1, w_factor):  # s1 is fwhm
     return il, iu
 
 
-def append_to_dict(tab, lbl, fc, param, eqw, eqw_err, soc):
-    tab[lbl].append(fc)
-    tab[lbl].append(param)
-    tab[lbl].append(eqw)
-    tab[lbl].append(eqw_err)
-    tab[lbl].append(soc)
-    return tab
-
-
-def find_eqws(line, spec, strong_lines, cfile):
+def find_eqws(line, spec, strong_lines, cfile, logfile):
     results = {}
     # Fit multiple gaussian profile
     params, mg_errs = fit_multi_gauss(spec[:, 0], spec[:, 1], strong_lines,
@@ -60,7 +51,7 @@ def find_eqws(line, spec, strong_lines, cfile):
             oc_v = np.std(np.abs(spec[il:iu, 1] - 1.0 + svoigt[il:iu]))
             results['v'] = svoigt, vpar, I, v_errs, oc_v
         except:
-            print "Not enough points to fit a reliable Voigt profile"
+            print_and_log(logfile, ["Not enough points to fit a reliable Voigt profile"])
 
     return results
 
@@ -87,7 +78,6 @@ def evaluate_results(line, rslt, cfile, logfile):
         out1 = rslt['mg'][1][np.abs(rslt['mg'][1][:, 0] - line).argmin()]
         out = [line, out1[0], np.abs(out1[2]), rslt['mg'][2], rslt['mg'][3]]
 
-
     if out[3] > cfile.getfloat('Lines', 'h_eqw') or out[3] < cfile.getfloat('Lines', 'l_eqw'):
         print_and_log(logfile, ['Line is too strong or too weak'])
         out[2] = -99.9
@@ -107,7 +97,7 @@ def evaluate_results(line, rslt, cfile, logfile):
 def EW_analysis(line, spec, strong_lines, cfile, logfile):
     # do all fits: multi gauss, sgauss (part of multi gauss),
     # gauss fitted in small area, voigt fitted in small area
-    r_tab = find_eqws(line, spec, strong_lines, cfile)  # results tab
+    r_tab = find_eqws(line, spec, strong_lines, cfile, logfile)  # results tab
     print_mgauss_data(r_tab, logfile)
     # Check if EW is reasonable
     lr = evaluate_results(line, r_tab, cfile, logfile)

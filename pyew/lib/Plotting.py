@@ -1,5 +1,4 @@
 import time
-
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
@@ -7,6 +6,8 @@ from Prepare_spectrum import get_thold
 from Line_analysis import EW_analysis
 from IO_functions import *
 plt.ion()
+
+
 # #####################################################
 # Ploting module
 # #####################################################
@@ -34,7 +35,7 @@ class Plot_Module(object):
         self.ax[0].xaxis.set_major_formatter(x_formatter)
         self.ax[0].axhline(1.0, color='g', label='continuum')
         self.ax[0].set_xlabel('Wavelenght')
-        self.ax[0].plot(self.spec[:, 0], self.spec[:, 1], 'o', color='k', label='spectrum')
+        self.ax[0].plot(self.spec[:, 0], self.spec[:, 1], '.', color='k', label='spectrum')
         self.ax[0].set_ylim(min(self.spec[:, 1]) - 0.1, 1. + 0.4 * (1. + 0.1 - min(self.spec[:, 1])))
 
         self.ax[1].axhline(0)
@@ -63,8 +64,9 @@ class Plot_Module(object):
                             label=fit_style[3],
                             zorder=fit_style[4])
 
-        x01 = self.r_tab['g'][1][1]
-        s1 = self.r_tab['g'][1][2]
+        mg_line = self.r_tab['mg'][1][np.abs(self.r_tab['mg'][1][:, 0] - self.a_line[0]).argmin()]
+        x01 = mg_line[0]
+        s1 = mg_line[2]
 
         self.ax[0].axvspan(x01 - self.cfile.getfloat('Lines', 'w_factor') * s1,
                            x01 + self.cfile.getfloat('Lines', 'w_factor') * s1, color='g',
@@ -72,6 +74,7 @@ class Plot_Module(object):
         self.ax[0].legend(loc=2, numpoints=1, fontsize='10', ncol=4)
 
         self.ax[0].axvline(x01, color='r', lw=1.5, label='line')
+
         for oline in self.r_tab['mg'][1][:, 0]:
             self.ax[0].axvline(oline, c='r', zorder=1, label='strong lines')
 
