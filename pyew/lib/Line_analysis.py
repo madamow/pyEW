@@ -22,7 +22,7 @@ def append_to_dict(tab, lbl, fc, param, eqw, eqw_err, soc):
 
 
 def find_eqws(line, spec, strong_lines, cfile):
-    results = {'mg': [], 'sg': [], 'g': [], 'v': []}
+    results = {}
     # Fit multiple gaussian profile
     params, mg_errs = fit_multi_gauss(spec[:, 0], spec[:, 1], strong_lines,
                                       cfile.getfloat('Lines', 'det_level'))
@@ -39,33 +39,28 @@ def find_eqws(line, spec, strong_lines, cfile):
     eqw = get_gew(a1, s1)
     eqw_err = eqw * (mg_errs[ip, 0] / a1 + mg_errs[ip, 2] / s1)
 
-    # Calculate single gauss profile
-    # (this gauss is a part of multigaussian fit)
-    sgaus = gaus(spec[:,0], a1, x01, s1)
-    sparams = [a1, x01, s1]
-
     # Determine region close to gaussian line center#
-    il, iu = pm_width(spec[:,0], x01, s1, cfile.getfloat('Lines', 'w_factor'))
+    il, iu = pm_width(spec[:, 0], x01, s1, cfile.getfloat('Lines', 'w_factor'))
 
     oc_mg = np.std(np.abs(spec[il:iu, 1] - 1.0 + mgaus[il:iu]))
-    oc_sg = np.std(np.abs(spec[il:iu, 1] - 1.0 + sgaus[il:iu]))
+    results['mg'] = mgaus, params, eqw, eqw_err, oc_mg
 
-    results = append_to_dict(results, 'mg', mgaus, params, eqw, eqw_err, oc_mg)
-    results = append_to_dict(results, 'sg', sgaus, sparams, eqw, eqw_err, oc_sg)
-
-    # Fit single Gauss and Voigt profile
+    # Fit single Gauss
     eqw_gf, eqw_gf_err, gparams = fit_single_gauss(spec[il:iu, 0], spec[il:iu, 1], a1, x01, s1)
     gausf = gaus(spec[:, 0], gparams[0], gparams[1], gparams[2])
     oc_g = np.std(np.abs(spec[il:iu, 1] - 1.0 + gausf[il:iu]))
-    results = append_to_dict(results, 'g', gausf, gparams, eqw_gf, eqw_gf_err, oc_g)
+    results['g'] = gausf, gparams, eqw_gf, eqw_gf_err, oc_g
+    print np.log10(0.001 * eqw / line), cfile.getfloat('Lines', 'v_lvl')
 
-    try:
-        I, v_errs, vpar = fit_Voigt(spec[il:iu, 0], spec[il:iu, 1], x01)
-    except:
-        I, v_errs, vpar = fit_Voigt(spec[:, 0], spec[:, 1], x01)
-    svoigt = Voigt(spec[:, 0], vpar[0], vpar[1], vpar[2], vpar[3], 0., 0.)
-    oc_v = np.std(np.abs(spec[il:iu, 1] - 1.0 + svoigt[il:iu]))
-    results = append_to_dict(results, 'v', svoigt, vpar, I, v_errs, oc_v)
+    # If mg_ew > v_lvl, fit Voigt
+    if np.log10(0.001 * eqw / line) > cfile.getfloat('Lines', 'v_lvl'):
+        try:
+            I, v_errs, vpar = fit_Voigt(spec[il:iu, 0], spec[il:iu, 1], x01)
+            svoigt = Voigt(spec[:, 0], vpar[0], vpar[1], vpar[2], vpar[3], 0., 0.)
+            oc_v = np.std(np.abs(spec[il:iu, 1] - 1.0 + svoigt[il:iu]))
+            results['v'] = svoigt, vpar, I, v_errs, oc_v
+        except:
+            print "Not enough points to fit a reliable Voigt profile"
 
     return results
 
@@ -75,28 +70,23 @@ def evaluate_results(line, rslt, cfile, logfile):
 
     if rslt['mg'][3] > 0.5 * rslt['mg'][2]:
         print_and_log(logfile, ['Huge error!', rslt['mg'][2], rslt['mg'][3]])
-        hu = True
-    else:
-        hu = False
 
-    if rslt['v'][4] < rslt['mg'][4] and \
-            rslt['v'][4] < rslt['g'][4] and \
-            np.log10(rslt['mg'][2] * 0.001 / line) > cfile.getfloat('Lines', 'v_lvl'):
-        print_and_log(logfile, ['using Voigt profile'])
+    best_fit = 'mg'
+    for fit in rslt:
+        if rslt[fit][4] < rslt[best_fit][4]:
+            best_fit = fit
+
+    print_and_log(logfile, [best_info(best_fit)])
+
+    if best_fit == 'v':
         v_fwhm = voigt_fwhm(rslt['v'][1][1], rslt['v'][1][2])
         out = [line, rslt['v'][1][2], v_fwhm, rslt['v'][2], rslt['v'][3]]
-
-    elif rslt['g'][4] < rslt['mg'][4] and \
-            np.log10(rslt['mg'][2] * 0.001 / line) < cfile.getfloat('Lines', 'v_lvl'):
-        print_and_log(logfile, ['using single Gauss fit'])
-        out = [line, rslt['g'][1][1], rslt['g'][1][2], rslt['g'][2], rslt['g'][3]]
-
-    elif hu and rslt['g'][4] < rslt['sg'][4]:
-        print_and_log(logfile, ['using single Gauss fit'])
+    elif best_fit == 'g':
         out = [line, rslt['g'][1][1], rslt['g'][1][2], rslt['g'][2], rslt['g'][3]]
     else:
         out1 = rslt['mg'][1][np.abs(rslt['mg'][1][:, 0] - line).argmin()]
         out = [line, out1[0], np.abs(out1[2]), rslt['mg'][2], rslt['mg'][3]]
+
 
     if out[3] > cfile.getfloat('Lines', 'h_eqw') or out[3] < cfile.getfloat('Lines', 'l_eqw'):
         print_and_log(logfile, ['Line is too strong or too weak'])

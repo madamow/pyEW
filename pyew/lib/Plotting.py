@@ -48,7 +48,6 @@ class Plot_Module(object):
         self.ax[1].axhline(thold, c='r')
 
         self.lstyle = np.array([['mg', 'c', '-', 'multi Gauss', 4],
-                                ['sg', 'b', ':', 'line in mGauss', 3],
                                 ['g', 'y', '-', 'Gauss', 2],
                                 ['v', 'm', '-', 'Voigt', 1]])
 
@@ -64,8 +63,9 @@ class Plot_Module(object):
                             label=fit_style[3],
                             zorder=fit_style[4])
 
-        x01 = self.r_tab['sg'][1][1]
-        s1 = self.r_tab['sg'][1][2]
+        x01 = self.r_tab['g'][1][1]
+        s1 = self.r_tab['g'][1][2]
+
         self.ax[0].axvspan(x01 - self.cfile.getfloat('Lines', 'w_factor') * s1,
                            x01 + self.cfile.getfloat('Lines', 'w_factor') * s1, color='g',
                            alpha=0.25, label='eval. area')

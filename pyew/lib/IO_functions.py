@@ -2,6 +2,7 @@ import ConfigParser
 import numpy as np
 from Gauss_Voigt import get_gew
 
+fit_labels = {'mg': 'multi Gauss', 'sg': 'part of mGauss', 'g': 'Gauss', 'v': 'Voigt'}
 
 # INPUT
 def read_config_file(cfile):
@@ -55,13 +56,14 @@ def print_mgauss_data(rslt, logfile):
 
 
 def print_line_info(rslt, logfile):
-    fit_labels = {'mg': 'multi Gauss', 'sg': 'part of mGauss', 'g': 'Gauss', 'v': 'Voigt'}
     for fit in rslt:
         f_info = "%15s %s %4.2f %s %f %s %f" % \
                 (fit_labels[fit], ": EW =", rslt[fit][2],
                  "fq =", rslt[fit][3], "o-c:", rslt[fit][4])
         print_and_log(logfile, [f_info])
 
+def best_info(bf):
+    return "using an EW from %s" % fit_labels[bf]
 
 #######################################################################################################################
 # OUTPUT
