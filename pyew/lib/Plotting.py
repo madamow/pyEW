@@ -5,8 +5,8 @@ import numpy as np
 from Prepare_spectrum import get_thold
 from Line_analysis import EW_analysis
 from IO_functions import *
+plt.switch_backend('qt5Agg')
 plt.ion()
-
 
 # #####################################################
 # Ploting module
@@ -44,7 +44,7 @@ class Plot_Module(object):
         self.ax[1].set_xlim(a_line[0] - cfile.getfloat('Spectrum', 'off'),
                             a_line[0] + cfile.getfloat('Spectrum', 'off'))
         self.ax[1].plot(self.gggf_infm, np.zeros_like(self.gggf_infm),
-                        'o', color='b', label='flex points + -> -')
+                        'o', color='b', label='flex points + to -')
         self.ax[1].axhline(-thold, c='r')
         self.ax[1].axhline(thold, c='r')
 
@@ -62,7 +62,7 @@ class Plot_Module(object):
                             color=fit_style[1],
                             ls=fit_style[2],
                             label=fit_style[3],
-                            zorder=fit_style[4])
+                            zorder=int(fit_style[4]))
 
         mg_line = self.r_tab['mg'][1][np.abs(self.r_tab['mg'][1][:, 0] - self.a_line[0]).argmin()]
         x01 = mg_line[0]
@@ -100,31 +100,34 @@ class Plot_Module(object):
                     artist.get_label() == 'line_pnt'):
                 artist.remove()
 
+    def add_line(self, xpos):
+        ind = np.abs((self.gggf_infm - xpos)).argmin()
+        self.ax[1].plot(self.gggf_infm[ind], 1.0, 'o', color='r', mec='b', picker=5,
+                        label='line_pnt')
+        self.ax[0].axvline(self.gggf_infm[ind], c='r', ls=':', zorder=1,
+                           label='line_pnt')
+        self.strong_lines.append(self.gggf_infm[ind])
+        print_and_log(self.log, ['Adding ', self.gggf_infm[ind], 'to fit'])
+        plt.draw()
+
+    def remove_line(self, xpos):
+        ind = np.abs((self.strong_lines - xpos)).argmin()
+        self.ax[1].plot(self.strong_lines[ind], 1.0, 'o',
+                            color='b', mec='r',
+                            picker=5, label='line_pnt')
+        self.ax[0].axvline(self.strong_lines[ind], c='b', ls=':', zorder=1,
+                               label='line_pnt')
+        self.strong_lines.pop(ind)
+        print_and_log(self.log, ['Removing ', self.strong_lines[ind], 'from fit'])
+        plt.draw()
+
+
     def onclick(self, event):
         toolbar = plt.get_current_fig_manager().toolbar
         if event.button == 1 and toolbar.mode == '':
-            ind = np.abs((self.gggf_infm - event.xdata)).argmin()
-            self.ax[1].plot(self.gggf_infm[ind], 1.0, 'o', color='r', mec='b', picker=5,
-                            label='line_pnt')
-            self.ax[0].axvline(self.gggf_infm[ind], c='r', ls=':', zorder=1,
-                               label='line_pnt')
-            self.strong_lines.append(self.gggf_infm[ind])
-            print_and_log(self.log, ['Adding ', self.gggf_infm[ind], 'to fit'])
-
+            self.add_line(event.xdata)
         elif event.button == 3 and toolbar.mode == '':
-            ind = np.squeeze(np.where(
-                np.abs(self.strong_lines - event.xdata) < 0.05))
-
-            if ind:
-                self.ax[1].plot(self.strong_lines[ind], 1.0, 'o',
-                                color='b', mec='r',
-                                picker=5, label='line_pnt')
-                self.ax[0].axvline(self.strong_lines[ind], c='b', ls=':', zorder=1,
-                                   label='line_pnt')
-                self.strong_lines.pop(ind)
-                print_and_log(self.log, ['Removing ', self.strong_lines[ind], 'from fit'])
-            else:
-                print 'Click closer to chosen point'
+            self.remove_line(event.xdata)
 
         plt.draw()
 
@@ -134,8 +137,13 @@ class Plot_Module(object):
             self.update_plot()
         elif event.key == 'q':
             exit()
+        elif event.key == '-':
+            self.remove_line(event.xdata)
+        elif event.key == '=':
+            self.add_line(event.xdata)
         else:
             self.killme = True
+
 
     def update_plot(self):
         self.strong_lines = sorted(list(set(self.strong_lines)))
@@ -149,20 +157,20 @@ class Plot_Module(object):
         print_and_log(self.log, ['\nCurrent moog entry:\n', moog])
 
     def run(self):
+
         plt.show()
         self.update_plot()
-        print '########################################'
-        print 'Click on plot to edit strong lines list:'
-        print '(left button - add lines, right - remove lines).'
-        print 'Then hit enter to redo the plot'
-        print 'q - to quit, any other key to move to the next line'
-        print '#######################################'
+        print('########################################')
+        print('Click on plot to edit strong lines list:')
+        print('(left button - add lines, right - remove lines).')
+        print('Then hit enter to redo the plot')
+        print('q - to quit, any other key to move to the next line')
+        print('#######################################')
         while not self.killme:
             keyboard_click = False
             while not keyboard_click:
                 keyboard_click = plt.waitforbuttonpress()
             time.sleep(0.1)
-
         plt.close()
-        print 'Writing to output file...'
+        print('Writing to output file...')
         moog_output(self.out, self.log, self.a_line, self.lr)

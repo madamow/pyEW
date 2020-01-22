@@ -69,9 +69,12 @@ def fit_multi_gauss(x, f, strong_lines, det_level):
     while params.shape[0] != new_params.shape[0] and params.shape[0] > 0.:
         plsq = so.leastsq(res_mg, params,
                           args=(x, 1.0 - f, params.shape[0]), full_output=1)
+
         new_params = np.reshape(plsq[0], (params.shape[0], 3))
+
         # evaluate  run
         ind = np.where(np.abs(strong_lines - new_params[:, 0]) < det_level)
+
         strong_lines = np.array(strong_lines)[ind]
         params = new_params[ind]
 
@@ -87,8 +90,8 @@ def leastsq_errors(fit_tab, p_no):
     pcov = fit_tab[1]
 
     if pcov is None:
-        row_col = ((len(fit_tab[0]) / p_no) * p_no)
-        print "Covariance matrix is empty"
+        row_col = int((len(fit_tab[0]) / p_no) * p_no)
+        print("Covariance matrix is empty")
         errs_matrix = np.ones((row_col, row_col))
         errs_matrix[:, :] = 1000.0  # make errors huge
     else:
@@ -96,8 +99,7 @@ def leastsq_errors(fit_tab, p_no):
         errs_matrix = sq * pcov
 
     i = np.arange(len(fit_tab[0]))
-    f_errs = np.reshape(errs_matrix[i, i] ** 2, ((len(fit_tab[0]) / p_no), p_no))
-
+    f_errs = np.reshape(errs_matrix[i, i] ** 2, (int(len(fit_tab[0]) / p_no), p_no))
     return f_errs
 
 

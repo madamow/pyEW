@@ -19,7 +19,7 @@ def find_eqws(line, spec, strong_lines, cfile, logfile):
                                       cfile.getfloat('Lines', 'det_level'))
 
     if params.shape[0] == 0:
-        print 'Line ', line, 'was not detected'
+        print('Line ', line, 'was not detected')
         params = np.array([[-9.9, -9.9, -9.9]])
 
     mgaus = multiple_gaus(spec[:, 0], params)
@@ -41,7 +41,6 @@ def find_eqws(line, spec, strong_lines, cfile, logfile):
     gausf = gaus(spec[:, 0], gparams[0], gparams[1], gparams[2])
     oc_g = np.std(np.abs(spec[il:iu, 1] - 1.0 + gausf[il:iu]))
     results['g'] = gausf, gparams, eqw_gf, eqw_gf_err, oc_g
-    print np.log10(0.001 * eqw / line), cfile.getfloat('Lines', 'v_lvl')
 
     # If mg_ew > v_lvl, fit Voigt
     if np.log10(0.001 * eqw / line) > cfile.getfloat('Lines', 'v_lvl'):

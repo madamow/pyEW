@@ -1,4 +1,4 @@
-import ConfigParser
+import configparser as ConfigParser
 import numpy as np
 from Gauss_Voigt import get_gew
 
@@ -17,6 +17,7 @@ def get_lab_data(cfile):
     # Load a file with data for lines to analyze
     # Format: line element excitation_potential loggf,
     # all in MOOG like format
+    print(cfile.get('Input files', 'line_list_file'))
     return np.loadtxt(cfile.get('Input files', 'line_list_file'), usecols=[0, 1, 2, 3])
 
 
@@ -76,7 +77,7 @@ def create_log(fname):
 
 def print_and_log(logfile, list_of_inps):
     s = ' '.join(map(str, list_of_inps))
-    print s
+    print(s)
     logfile.write(s + "\n")
 
 
