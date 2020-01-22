@@ -2,7 +2,7 @@
 ### Tools for finding equivalent widths of spectral lines
 
 
-### Requires the following Python (2.7) libraries:
+### Requires the following Python libraries:
 - numpy
 - scipy
 - matplotib
